@@ -440,17 +440,32 @@ async function init(){
 
 // ══ CARGA CATÁLOGO ══
 async function cargarCatalogo(){
-  const res  = await fetch(CSV_PRODUCTOS + '&t=' + Date.now());
-  const text = await res.text();
-  const filas = text.trim().split('\n').slice(1); // salteamos header
+  const res    = await fetch(CSV_PRODUCTOS + '&t=' + Date.now());
+  const buffer = await res.arrayBuffer();
+  const text   = new TextDecoder('utf-8').decode(buffer);
+  const filas  = text.trim().split('\n').slice(1); // salteamos header
   catalogo = filas.map(f => {
-    const cols = f.split(',');
+    const cols = parseCsvRow(f);
     return {
-      nombre:    cols[0]?.trim().replace(/^"|"$/g,'') || '',
-      categoria: cols[1]?.trim().replace(/^"|"$/g,'') || 'Otro',
+      nombre:      cols[0]?.trim() || '',
+      categoria:   cols[1]?.trim() || 'Otro',
       qty_default: parseInt(cols[2]) || 1
     };
   }).filter(p => p.nombre);
+}
+
+// Parsea una fila CSV respetando campos entre comillas
+function parseCsvRow(row){
+  const cols = [];
+  let cur = '', inQ = false;
+  for(let i = 0; i < row.length; i++){
+    const c = row[i];
+    if(c === '"'){ inQ = !inQ; }
+    else if(c === ',' && !inQ){ cols.push(cur); cur = ''; }
+    else { cur += c; }
+  }
+  cols.push(cur);
+  return cols;
 }
 
 // ══ CARGA ESTADO ══
