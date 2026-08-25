@@ -751,7 +751,7 @@ function agregarCategoriaDesdeCampo(){
 
 function cerrarModal(){document.getElementById('modalBg').classList.remove('open');}
 
-function guardarNuevoProducto(){
+async function guardarNuevoProducto(){
   const nombre=document.getElementById('inputNombre').value.trim();
   const cat=document.getElementById('inputCategoria').value;
   const precio=parseFloat(document.getElementById('inputPrecio').value)||0;
@@ -759,8 +759,21 @@ function guardarNuevoProducto(){
   const nota=document.getElementById('inputNota').value.trim();
   if(!nombre){showToast('Escribí un nombre');return;}
   if(catalogo.find(p=>p.nombre.toLowerCase()===nombre.toLowerCase())){showToast('Ya existe');return;}
-  catalogo.push({nombre,categoria:cat,qty_default:1,precio,frecuencia,nota});
-  cerrarModal();showToast(`"${nombre}" agregado`);render();
+  // Agregar al catálogo local
+  catalogo.push({nombre,categoria:cat,qty_default:1,precio,frecuencia,nota,foto:''});
+  cerrarModal();
+  // Escribir en la hoja Productos del Sheet
+  try{
+    await fetch(SCRIPT_URL,{
+      method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({accion:'nuevo_producto', nombre, categoria:cat, cantidad_default:1})
+    });
+    showToast(`"${nombre}" agregado ✓`);
+  }catch(e){
+    showToast(`"${nombre}" agregado (sin conexión)`);
+  }
+  render();
 }
 
 // ══ TABS ══
