@@ -94,6 +94,10 @@
   .qty-btn:hover{background:var(--accent);border-color:var(--accent);}
   .qty-num{font-size:.85rem;font-weight:700;min-width:18px;text-align:center;}
   .prod-nombre-input{background:var(--surface);border:1px solid var(--accent);border-radius:5px;color:var(--text);font-size:.92rem;padding:.15rem .4rem;outline:none;width:100%;}
+  .prod-thumb{width:38px;height:38px;border-radius:6px;object-fit:cover;flex-shrink:0;border:1px solid var(--border);background:var(--cat-pill);}
+  .prod-thumb-placeholder{width:38px;height:38px;border-radius:6px;flex-shrink:0;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:.8rem;color:var(--muted);}
+  .foto-preview{width:100%;max-height:120px;object-fit:cover;border-radius:6px;margin-top:.4rem;border:1px solid var(--border);}
+  .foto-preview.error{display:none;}
 
   .total-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.4rem;}
   .total-label{font-size:.8rem;color:var(--muted);}
@@ -295,7 +299,7 @@ async function cargarCatalogo(){
   const filas=text.trim().split('\n').slice(1);
   catalogo=filas.map(f=>{
     const cols=parseCsvRow(f);
-    return{nombre:cols[0]?.trim()||'',categoria:cols[1]?.trim()||'Otro',qty_default:parseInt(cols[2])||1,precio:0,frecuencia:'ocasional',nota:''};
+    return{nombre:cols[0]?.trim()||'',categoria:cols[1]?.trim()||'Otro',qty_default:parseInt(cols[2])||1,precio:0,frecuencia:'ocasional',nota:'',foto:''};
   }).filter(p=>p.nombre);
 }
 
@@ -320,7 +324,7 @@ async function cargarEstado(){
   if(data.catalogoExtras){
     data.catalogoExtras.forEach(ex=>{
       const prod=catalogo.find(p=>p.nombre===ex.nombre);
-      if(prod){prod.precio=ex.precio||0;prod.frecuencia=ex.frecuencia||'ocasional';prod.nota=ex.nota||'';}
+      if(prod){prod.precio=ex.precio||0;prod.frecuencia=ex.frecuencia||'ocasional';prod.nota=ex.nota||'';prod.foto=ex.foto||'';}
       else{catalogo.push(ex);}
     });
   }
@@ -335,7 +339,7 @@ function cargarLocal(){
 
 // ══ GUARDAR ══
 function getPayload(){
-  const catalogoExtras=catalogo.map(p=>({nombre:p.nombre,categoria:p.categoria,qty_default:p.qty_default,precio:p.precio||0,frecuencia:p.frecuencia||'ocasional',nota:p.nota||''}));
+  const catalogoExtras=catalogo.map(p=>({nombre:p.nombre,categoria:p.categoria,qty_default:p.qty_default,precio:p.precio||0,frecuencia:p.frecuencia||'ocasional',nota:p.nota||'',foto:p.foto||''}));
   return{lista,historial,catalogoExtras};
 }
 
@@ -497,6 +501,7 @@ function guardarDetalle(nombre){
   prod.precio=parseFloat(document.getElementById(`precio_${CSS.escape(nombre)}`)?.value)||0;
   prod.frecuencia=document.getElementById(`freq_${CSS.escape(nombre)}`)?.value||'ocasional';
   prod.nota=document.getElementById(`nota_${CSS.escape(nombre)}`)?.value||'';
+  prod.foto=document.getElementById(`foto_${CSS.escape(nombre)}`)?.value.trim()||'';
   guardarDebounce();renderCatalogo();showToast('Datos guardados');
 }
 
@@ -578,6 +583,7 @@ function renderCatalogo(){
       html+=`<div class="prod-wrap${isExp?' expanded':''}">
         <div class="prod-row${enLista?' en-lista':''}" onclick="toggleEnLista('${idSafe}',event)">
           <div class="prod-check">${enLista?'✓':''}</div>
+          ${p.foto?`<img class="prod-thumb" src="${p.foto}" onerror="this.style.display='none'" loading="lazy">`:`<div class="prod-thumb-placeholder">📷</div>`}
           <div class="prod-info">
             <span class="prod-nombre">${nbHtml}</span>
             <div class="prod-meta">${freqBadge}${notaHtml}${precioHtml}</div>
@@ -604,6 +610,11 @@ function renderCatalogo(){
             </div>
           </div>
           <div class="detalle-nota"><label>Nota</label><input id="nota_${idSafe}" type="text" value="${p.nota||''}" placeholder="Marca, tamaño…"></div>
+          <div class="detalle-nota" style="margin-top:.5rem">
+            <label>📷 URL de foto (opcional)</label>
+            <input id="foto_${idSafe}" type="url" value="${p.foto||''}" placeholder="https://…" oninput="previewFoto('${idSafe}')">
+            <img id="fotoPreview_${idSafe}" class="foto-preview${p.foto?'':' error'}" src="${p.foto||''}" onerror="this.classList.add('error')" onload="this.classList.remove('error')">
+          </div>
           <div style="margin-top:.6rem;text-align:right">
             <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="guardarDetalle('${idSafe}')">Guardar</button>
           </div>
@@ -627,7 +638,7 @@ function renderComprar(){
     const prod=catalogo.find(p=>p.nombre===nombre);
     const cat=prod?.categoria||'Otro';
     if(!cats[cat])cats[cat]=[];
-    cats[cat].push({nombre,...data,precio:prod?.precio||0,nota:prod?.nota||''});
+    cats[cat].push({nombre,...data,precio:prod?.precio||0,nota:prod?.nota||'',foto:prod?.foto||''});
   });
   Object.values(cats).forEach(arr=>arr.sort((a,b)=>a.comprado-b.comprado));
 
@@ -641,6 +652,7 @@ function renderComprar(){
       const precioHtml=p.precio?`<span style="font-size:.75rem;color:var(--accent2);font-weight:600;margin-left:.3rem">$${(p.precio*p.qty).toLocaleString('es-AR')}</span>`:'';
       html+=`<div class="prod-row${p.comprado?' comprado':''}" onclick="toggleComprado('${esc(p.nombre)}',event)">
         <div class="prod-check">${p.comprado?'✓':''}</div>
+        ${p.foto?`<img class="prod-thumb" src="${p.foto}" onerror="this.style.display='none'" loading="lazy">`:''}
         <div class="prod-info">
           <div style="display:flex;align-items:center;gap:.3rem;flex-wrap:wrap">
             <span class="prod-nombre">${p.nombre}</span><span style="color:var(--muted);font-size:.8rem">×${p.qty||1}</span>${precioHtml}
@@ -756,6 +768,14 @@ document.getElementById('modalBg').addEventListener('keydown',e=>{
   if(e.key==='Escape')cerrarModal();
   if(e.key==='Enter'&&e.target.id!=='inputNuevaCat')guardarNuevoProducto();
 });
+
+function previewFoto(idSafe){
+  const url=document.getElementById('foto_'+idSafe)?.value.trim()||'';
+  const img=document.getElementById('fotoPreview_'+idSafe);
+  if(!img)return;
+  if(url){img.src=url;img.classList.remove('error');}
+  else{img.src='';img.classList.add('error');}
+}
 
 init();
 </script>
