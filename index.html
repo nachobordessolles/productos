@@ -470,12 +470,19 @@ function parseCsvRow(row){
 
 // ══ CARGA ESTADO ══
 async function cargarEstado(){
-  const res  = await fetch(CSV_ESTADO + '&t=' + Date.now());
-  const text = await res.text();
-  const filas = text.trim().split('\n');
-  // B1: segunda columna de la primera fila
-  const raw = filas[0].substring(filas[0].indexOf(',') + 1).trim().replace(/^"|"$/g,'');
-  const data = raw && raw !== '{}' ? JSON.parse(raw) : {};
+  const res    = await fetch(CSV_ESTADO + '&t=' + Date.now());
+  const buffer = await res.arrayBuffer();
+  const text   = new TextDecoder('utf-8').decode(buffer);
+  const filas  = text.trim().split('\n');
+  // B1: todo lo que viene después de la primera coma de la fila 1
+  const fila0  = filas[0];
+  const idx    = fila0.indexOf(',');
+  let raw = idx >= 0 ? fila0.substring(idx + 1).trim() : '';
+  // Sacar comillas externas si el CSV envolvió el JSON entre ""
+  if(raw.startsWith('"') && raw.endsWith('"')){
+    raw = raw.slice(1,-1).replace(/""/g, '"');
+  }
+  const data = raw && raw.length > 2 ? JSON.parse(raw) : {};
   lista = data.lista || {};
 }
 
