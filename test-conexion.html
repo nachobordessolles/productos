@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Test Conexión</title>
+<style>
+  body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 2rem; }
+  h2 { color: #a78bfa; }
+  button { background: #7c3aed; color: #fff; border: none; padding: .6rem 1.2rem; border-radius: 6px; cursor: pointer; margin: .4rem; font-size: 1rem; }
+  button:hover { background: #6d28d9; }
+  pre { background: #0f0f1a; border: 1px solid #333; border-radius: 8px; padding: 1rem; white-space: pre-wrap; word-break: break-all; }
+  .ok  { color: #4ade80; }
+  .err { color: #f87171; }
+  .info { color: #facc15; }
+</style>
+</head>
+<body>
+
+<h2>🔌 Test de Conexión — Lista de Compras</h2>
+
+<button onclick="testLeer()">📖 Leer (GET CSV)</button>
+<button onclick="testEscribir()">✏️ Escribir (POST Script)</button>
+<button onclick="testRoundtrip()">🔄 Roundtrip (escribir + leer)</button>
+
+<pre id="log">Elegí una acción arriba...</pre>
+
+<script>
+const CSV_URL   = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=0&single=true&output=csv';
+const SCRIPT_URL= 'https://script.google.com/macros/s/AKfycbz9iMOzHW-zpBaIwC_NU3W-2PVfbsTi5nUwFYfrV47CH0Bk1dKrBk4J8ZL17Gghm6Wa/exec';
+
+const log = document.getElementById('log');
+
+function escribir(msg, cls=''){
+  log.innerHTML += `<span class="${cls}">${msg}</span>\n`;
+}
+function limpiar(){ log.innerHTML = ''; }
+
+// Lee B1 del CSV y parsea el JSON guardado ahí
+async function leerEstado(){
+  const res  = await fetch(CSV_URL + '&t=' + Date.now());
+  const text = await res.text();
+  // El CSV tiene filas; B1 es la segunda columna de la primera fila
+  const filas = text.trim().split('\n');
+  const cols  = filas[0].split(',');
+  // B1 puede tener comas dentro (JSON), así que tomamos todo desde col 1 en adelante
+  const raw = filas[0].substring(filas[0].indexOf(',') + 1).trim();
+  return raw ? JSON.parse(raw) : {};
+}
+
+async function testLeer(){
+  limpiar();
+  escribir('📖 Leyendo CSV...', 'info');
+  try {
+    const data = await leerEstado();
+    escribir('✅ Conexión OK', 'ok');
+    escribir('Contenido de B1:');
+    escribir(JSON.stringify(data, null, 2));
+  } catch(e){
+    escribir('❌ Error: ' + e.message, 'err');
+  }
+}
+
+async function testEscribir(){
+  limpiar();
+  escribir('✏️ Escribiendo al Apps Script...', 'info');
+  const payload = { test: true, ts: Date.now(), mensaje: 'Hola desde la app!' };
+  try {
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    escribir('✅ POST enviado (no-cors, sin respuesta directa)', 'ok');
+    escribir('Payload enviado:');
+    escribir(JSON.stringify(payload, null, 2));
+    escribir('\n⏳ Esperá 2-3 segundos y hacé "Leer" para confirmar que se guardó.', 'info');
+  } catch(e){
+    escribir('❌ Error: ' + e.message, 'err');
+  }
+}
+
+async function testRoundtrip(){
+  limpiar();
+  escribir('🔄 Roundtrip: escribir → esperar → leer...', 'info');
+
+  const payload = { test: true, ts: Date.now(), ok: '¡Conexión exitosa!' };
+  escribir('\n1) Enviando POST...');
+  await fetch(SCRIPT_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  escribir('   POST enviado ✅', 'ok');
+
+  escribir('2) Esperando 3 segundos...', 'info');
+  await new Promise(r => setTimeout(r, 3000));
+
+  escribir('3) Leyendo CSV...');
+  try {
+    const data = await leerEstado();
+    escribir('   Leído ✅', 'ok');
+    escribir('\nContenido en B1:');
+    escribir(JSON.stringify(data, null, 2));
+
+    if(data.ts === payload.ts){
+      escribir('\n🎉 ROUNDTRIP EXITOSO — Sheet ↔ Script funcionan perfecto!', 'ok');
+    } else {
+      escribir('\n⚠️ El timestamp no coincide — puede ser caché del CSV. Probá "Leer" en 30 seg.', 'info');
+    }
+  } catch(e){
+    escribir('❌ Error leyendo: ' + e.message, 'err');
+  }
+}
+</script>
+</body>
+</html>
