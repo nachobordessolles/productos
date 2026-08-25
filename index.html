@@ -280,6 +280,33 @@
   }
   .modal-actions { display: flex; gap: .6rem; justify-content: flex-end; margin-top: 1rem; }
 
+  /* ── EDITAR NOMBRE INLINE ── */
+  .btn-edit {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: .82rem;
+    padding: .2rem .3rem;
+    border-radius: 4px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity .15s, color .15s;
+  }
+  .prod-row:hover .btn-edit { opacity: 1; }
+  .btn-edit:hover { color: var(--accent); }
+
+  .prod-nombre-input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 5px;
+    color: var(--text);
+    font-size: .92rem;
+    padding: .15rem .4rem;
+    outline: none;
+  }
+
   /* ── TOAST ── */
   .toast {
     position: fixed;
@@ -523,12 +550,13 @@ function renderCatalogo(){
     return;
   }
 
-  // Agrupar por categoría
+  // Agrupar por categoría y ordenar alfabéticamente
   const cats = {};
   catalogo.forEach(p => {
     if(!cats[p.categoria]) cats[p.categoria] = [];
     cats[p.categoria].push(p);
   });
+  Object.values(cats).forEach(arr => arr.sort((a,b) => a.nombre.localeCompare(b.nombre, 'es')));
 
   let html = '';
   for(const [cat, prods] of Object.entries(cats)){
@@ -544,6 +572,7 @@ function renderCatalogo(){
         <div class="prod-row ${enLista ? 'en-lista' : ''}" onclick="toggleEnLista('${esc(p.nombre)}')">
           <div class="prod-check">${enLista ? '✓' : ''}</div>
           <span class="prod-nombre">${p.nombre}</span>
+          <button class="btn-edit" onclick="editarNombre('${esc(p.nombre)}', event)" title="Editar nombre">✏️</button>
           <div class="qty-control" onclick="event.stopPropagation()">
             <button class="qty-btn" onclick="cambiarQty('${esc(p.nombre)}',-1,event)">−</button>
             <span class="qty-num">${qty}</span>
@@ -647,6 +676,51 @@ async function guardarNuevoProducto(){
   // Nota: el nuevo producto queda en la app. Para persistirlo en el sheet
   // habría que agregar una función de escritura a la hoja Productos.
   render();
+}
+
+// ══ EDITAR NOMBRE INLINE ══
+function editarNombre(nombreActual, e){
+  e.stopPropagation();
+  // Buscar el span del nombre dentro de la misma fila
+  const row = e.target.closest('.prod-row');
+  const span = row.querySelector('.prod-nombre');
+  if(!span) return;
+
+  // Reemplazar span por input
+  const input = document.createElement('input');
+  input.className = 'prod-nombre-input';
+  input.value = nombreActual;
+  span.replaceWith(input);
+  input.focus();
+  input.select();
+
+  // Deshabilitar el click de la fila mientras se edita
+  row.onclick = null;
+
+  const confirmar = () => {
+    const nuevoNombre = input.value.trim();
+    if(nuevoNombre && nuevoNombre !== nombreActual){
+      // Actualizar en catálogo
+      const prod = catalogo.find(p => p.nombre === nombreActual);
+      if(prod){
+        // Si estaba en la lista, migrar la key
+        if(lista[nombreActual]){
+          lista[nuevoNombre] = lista[nombreActual];
+          delete lista[nombreActual];
+        }
+        prod.nombre = nuevoNombre;
+        guardarDebounce();
+        showToast(`Renombrado a "${nuevoNombre}"`);
+      }
+    }
+    render();
+  };
+
+  input.addEventListener('blur', confirmar);
+  input.addEventListener('keydown', ev => {
+    if(ev.key === 'Enter')  { input.blur(); }
+    if(ev.key === 'Escape') { input.value = nombreActual; input.blur(); }
+  });
 }
 
 // ══ TABS ══
