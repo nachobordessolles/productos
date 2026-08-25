@@ -493,6 +493,7 @@ function toggleDetalle(nombre,e){
   e.stopPropagation();
   expandido=expandido===nombre?null:nombre;
   renderCatalogo();
+  if(expandido===nombre) setTimeout(()=>initDetalleInputs(esc(nombre)),50);
 }
 
 function guardarDetalle(nombre){
@@ -612,8 +613,8 @@ function renderCatalogo(){
           <div class="detalle-nota"><label>Nota</label><input id="nota_${idSafe}" type="text" value="${p.nota||''}" placeholder="Marca, tamaño…"></div>
           <div class="detalle-nota" style="margin-top:.5rem">
             <label>📷 URL de foto (opcional)</label>
-            <input id="foto_${idSafe}" type="url" value="${p.foto||''}" placeholder="https://…" oninput="previewFoto('${idSafe}')">
-            <img id="fotoPreview_${idSafe}" class="foto-preview${p.foto?'':' error'}" src="${p.foto||''}" onerror="this.classList.add('error')" onload="this.classList.remove('error')">
+            <input id="foto_${idSafe}" type="text" placeholder="https://…" oninput="previewFoto('${idSafe}')" data-url="${p.foto||''}" onmousedown="initFotoInput(this)">
+            <img id="fotoPreview_${idSafe}" class="foto-preview${p.foto?'':' error'}" src="" onerror="this.classList.add('error')" onload="this.classList.remove('error')">
           </div>
           <div style="margin-top:.6rem;text-align:right">
             <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .8rem" onclick="guardarDetalle('${idSafe}')">Guardar</button>
@@ -769,12 +770,28 @@ document.getElementById('modalBg').addEventListener('keydown',e=>{
   if(e.key==='Enter'&&e.target.id!=='inputNuevaCat')guardarNuevoProducto();
 });
 
+function initFotoInput(el){
+  if(el._initialized) return;
+  el._initialized = true;
+  const url = el.getAttribute('data-url')||'';
+  el.value = url;
+  const idSafe = el.id.replace('foto_','');
+  const img = document.getElementById('fotoPreview_'+idSafe);
+  if(img && url){ img.src=url; img.classList.remove('error'); }
+}
+
 function previewFoto(idSafe){
   const url=document.getElementById('foto_'+idSafe)?.value.trim()||'';
   const img=document.getElementById('fotoPreview_'+idSafe);
   if(!img)return;
   if(url){img.src=url;img.classList.remove('error');}
   else{img.src='';img.classList.add('error');}
+}
+
+// Al expandir un detalle, inicializar el input de foto
+function initDetalleInputs(idSafe){
+  const el = document.getElementById('foto_'+idSafe);
+  if(el) initFotoInput(el);
 }
 
 init();
