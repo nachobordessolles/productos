@@ -436,15 +436,10 @@ function parseCsvRow(row){
 }
 
 async function cargarEstado(){
-  const res=await fetch(CSV_ESTADO+'&t='+Date.now());
-  const buf=await res.arrayBuffer();
-  const text=new TextDecoder('utf-8').decode(buf);
-  const filas=text.trim().split('\n');
-  const fila0=filas[0];
-  const idx=fila0.indexOf(',');
-  let raw=idx>=0?fila0.substring(idx+1).trim():'';
-  if(raw.startsWith('"')&&raw.endsWith('"'))raw=raw.slice(1,-1).replace(/""/g,'"');
-  const data=raw&&raw.length>2?JSON.parse(raw):{};
+  // Lee directo del Apps Script — sin caché, siempre fresco
+  const res=await fetch(SCRIPT_URL+'?t='+Date.now());
+  const json=await res.json();
+  const data=json.data||{};
   listaSuper=data.listaSuper||{};
   listaVerde=data.listaVerde||{};
   historialSuper=data.historialSuper||[];
