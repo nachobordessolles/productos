@@ -313,7 +313,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const SCRIPT_URL     = 'https://script.google.com/macros/s/AKfycbwWMCpS9pqhnVdYnzy77XO_DlupNFZejURPhH_FBfP_AMAJwJC3N34A88njwKQX4ERg/exec';
+const SCRIPT_URL     = 'https://script.google.com/macros/s/AKfycbwOUqCtKH0FaFGRWLwNyOSMq_C8FhyDgRTWjct_4nCtMWZxl_7yo4kI-0JZ1WKO_pD8/exec';
 const CSV_PRODUCTOS  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=0&single=true&output=csv';
 const CSV_VERDULERIA = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=1009068369&single=true&output=csv';
 const CSV_ESTADO     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=1847026016&single=true&output=csv';
@@ -414,7 +414,16 @@ async function cargarCatalogoSuper(){
   const filas=text.trim().split('\n').slice(1);
   catalogoSuper=filas.map(f=>{
     const cols=parseCsvRow(f);
-    return{nombre:cols[0]?.trim()||'',categoria:cols[1]?.trim()||'Otro',qty_default:parseInt(cols[2])||1,precio:0,frecuencia:'ocasional',nota:'',foto:cols[3]?.trim()||''};
+    return{
+      nombre:     cols[0]?.trim()||'',
+      categoria:  cols[1]?.trim()||'Otro',
+      qty_default:parseInt(cols[2])||1,
+      foto:       cols[3]?.trim()||'',
+      codigo:     cols[4]?.trim()||'',
+      precio:     parseInt(cols[5])||0,
+      frecuencia: 'ocasional',
+      nota:       ''
+    };
   }).filter(p=>p.nombre);
 }
 
@@ -447,8 +456,14 @@ async function cargarEstado(){
   if(data.catalogoExtras){
     data.catalogoExtras.forEach(ex=>{
       const prod=catalogoSuper.find(p=>p.nombre===ex.nombre);
-      if(prod){prod.precio=ex.precio||0;prod.frecuencia=ex.frecuencia||'ocasional';prod.nota=ex.nota||'';}
-      else{catalogoSuper.push({...ex,foto:''});}
+      if(prod){
+        // El precio del CSV (ticket) tiene prioridad si existe, sino usa el de catalogoExtras
+        if(!prod.precio && ex.precio) prod.precio=ex.precio;
+        prod.frecuencia=ex.frecuencia||'ocasional';
+        prod.nota=ex.nota||'';
+      } else {
+        catalogoSuper.push({...ex,foto:'',codigo:''});
+      }
     });
   }
 }
@@ -467,7 +482,8 @@ function getHistorial(){ return modo==='super'?historialSuper:historialVerde; }
 
 // ══ GUARDAR ══
 function getPayload(){
-  const catalogoExtras=catalogoSuper.map(p=>({nombre:p.nombre,categoria:p.categoria,qty_default:p.qty_default,precio:p.precio||0,frecuencia:p.frecuencia||'ocasional',nota:p.nota||''}));
+  // Solo guardamos frecuencia y nota en Estado — precio y codigo viven en la hoja Productos
+  const catalogoExtras=catalogoSuper.map(p=>({nombre:p.nombre,categoria:p.categoria,qty_default:p.qty_default,frecuencia:p.frecuencia||'ocasional',nota:p.nota||''}));
   return{listaSuper,listaVerde,historialSuper,historialVerde,catalogoExtras};
 }
 
@@ -590,14 +606,24 @@ function previewFoto(idSafe){
 function guardarDetalle(nombre){
   const prod=catalogoSuper.find(p=>p.nombre===nombre);
   if(!prod)return;
-  prod.precio=parseFloat(document.getElementById(`precio_${CSS.escape(nombre)}`)?.value)||0;
+  const nuevoPrecio=parseInt(document.getElementById(`precio_${CSS.escape(nombre)}`)?.value)||0;
   prod.frecuencia=document.getElementById(`freq_${CSS.escape(nombre)}`)?.value||'ocasional';
   prod.nota=document.getElementById(`nota_${CSS.escape(nombre)}`)?.value||'';
   const nuevaFoto=document.getElementById(`foto_${CSS.escape(nombre)}`)?.value.trim()||'';
   const fotoChanged=nuevaFoto!==(prod.foto||'');
+  const precioChanged=nuevoPrecio!==prod.precio;
   prod.foto=nuevaFoto;
+  prod.precio=nuevoPrecio;
   if(fotoChanged)guardarFoto(nombre,nuevaFoto);
+  if(precioChanged)guardarPrecio(nombre,nuevoPrecio);
   guardarDebounce();renderCatalogo();showToast('Datos guardados');
+}
+
+async function guardarPrecio(nombre, precio){
+  try{
+    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({accion:'precio',nombre,precio})});
+  }catch(e){}
 }
 
 // ══ EDITAR NOMBRE ══
