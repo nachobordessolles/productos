@@ -242,6 +242,7 @@
         <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:.4rem;align-items:flex-end">
+        <button class="btn btn-ghost" style="font-size:.8rem;padding:.4rem .8rem" onclick="copiarLista()">📋 Copiar</button>
         <button class="btn btn-ghost" style="font-size:.8rem;padding:.4rem .8rem" onclick="archivarLista()">📅 Archivar</button>
         <button class="btn btn-danger" style="font-size:.8rem;padding:.4rem .8rem" onclick="limpiarLista()">🗑 Limpiar</button>
       </div>
@@ -1060,6 +1061,70 @@ async function guardarNuevoProductoVerde(){
     showToast(`"${nombre}" agregado ✓`);
   }catch(e){showToast(`"${nombre}" agregado (sin conexión)`);}
   render();
+}
+
+// ══ COPIAR LISTA ══
+function copiarLista(){
+  const lista=getLista();
+  const cat=getCatalogo();
+  const items=Object.entries(lista);
+  if(!items.length){showToast('La lista está vacía');return;}
+
+  let texto='';
+  const fecha=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+
+  if(modo==='super'){
+    texto+=`🛒 *Lista Supermercado* — ${fecha}\n`;
+    texto+='─────────────────\n';
+
+    // Agrupar por categoría
+    const cats={};
+    items.forEach(([nombre,d])=>{
+      const prod=cat.find(p=>p.nombre===nombre);
+      const c=prod?.categoria||'Otro';
+      if(!cats[c])cats[c]=[];
+      cats[c].push({nombre,qty:d.qty||1,precio:prod?.precio||0,comprado:d.comprado||false});
+    });
+    const catsSorted=Object.keys(cats).sort((a,b)=>a.localeCompare(b,'es'));
+    catsSorted.forEach(c=>{
+      texto+=`\n*${c.toUpperCase()}*\n`;
+      cats[c].forEach(p=>{
+        const check=p.comprado?'✅':'⬜';
+        const precio=p.precio?` — $${(p.precio*p.qty).toLocaleString('es-AR')}`:'';
+        texto+=`${check} ${p.nombre}${p.qty>1?' ×'+p.qty:''}${precio}\n`;
+      });
+    });
+
+    // Total
+    const total=items.reduce((s,[n,d])=>{
+      const prod=cat.find(p=>p.nombre===n);
+      return s+(prod?.precio||0)*(d.qty||1);
+    },0);
+    if(total>0){
+      texto+='─────────────────\n';
+      texto+=`💰 *Total estimado: $${total.toLocaleString('es-AR')}*\n`;
+    }
+
+  } else {
+    texto+=`🥦 *Lista Verdulería* — ${fecha}\n`;
+    texto+='─────────────────\n';
+    items.sort(([a],[b])=>a.localeCompare(b,'es')).forEach(([nombre,d])=>{
+      const check=d.comprado?'✅':'⬜';
+      texto+=`${check} ${nombre} — ${d.qty} ${d.unidad||'kg'}\n`;
+    });
+  }
+
+  navigator.clipboard.writeText(texto)
+    .then(()=>showToast('¡Copiado! Pegalo en WhatsApp 📋'))
+    .catch(()=>{
+      // Fallback para celulares que no soportan clipboard API
+      const ta=document.createElement('textarea');
+      ta.value=texto;ta.style.position='fixed';ta.style.opacity='0';
+      document.body.appendChild(ta);ta.focus();ta.select();
+      try{document.execCommand('copy');showToast('¡Copiado! Pegalo en WhatsApp 📋');}
+      catch(e){showToast('No se pudo copiar automáticamente');}
+      document.body.removeChild(ta);
+    });
 }
 
 // ══ TABS ══
