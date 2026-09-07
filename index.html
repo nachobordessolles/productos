@@ -195,6 +195,25 @@
   .empty p{font-size:.9rem;}
   mark{background:#4f8ef740;color:var(--text);border-radius:2px;}
 
+  /* STATS */
+  .stats-section{margin-bottom:1.6rem;}
+  .stats-title{font-size:.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.8rem;display:flex;align-items:center;gap:.4rem;}
+  .stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem;margin-bottom:.5rem;}
+  .stat-bar-wrap{display:flex;align-items:center;gap:.6rem;margin-bottom:.35rem;}
+  .stat-bar-label{font-size:.82rem;min-width:140px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .stat-bar-outer{flex:1;height:8px;background:var(--border);border-radius:99px;overflow:hidden;}
+  .stat-bar-inner{height:100%;border-radius:99px;transition:width .4s;}
+  .stat-bar-val{font-size:.78rem;color:var(--muted);min-width:30px;text-align:right;flex-shrink:0;}
+  .stat-big{font-size:1.6rem;font-weight:700;color:var(--accent2);}
+  .stat-sub{font-size:.78rem;color:var(--muted);margin-top:.2rem;}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:1rem;}
+  .stat-mini{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:.6rem .8rem;}
+  .stat-mini-val{font-size:1.1rem;font-weight:700;color:var(--accent);}
+  .stat-mini-label{font-size:.72rem;color:var(--muted);margin-top:.1rem;}
+  .inflacion-badge{display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .7rem;border-radius:6px;font-size:.85rem;font-weight:700;margin-top:.4rem;}
+  .inflacion-badge.sube{background:#3a1a1a;color:var(--danger);}
+  .inflacion-badge.baja{background:#1a3a1a;color:var(--verde);}
+
   /* COMPARADOR DE PRECIOS */
   .precio-comp{margin-top:.8rem;border-top:1px solid var(--border);padding-top:.7rem;}
   .precio-comp-title{font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;}
@@ -229,6 +248,7 @@
   <div class="tab active" id="tabPlanificar" onclick="setTab('planificar')">📋 Planificar</div>
   <div class="tab" id="tabComprar" onclick="setTab('comprar')">✅ Comprar</div>
   <div class="tab" id="tabHistorial" onclick="setTab('historial')">📅 Historial</div>
+  <div class="tab" id="tabStats" onclick="setTab('stats')">📊 Stats</div>
 </div>
 
 <main>
@@ -273,6 +293,11 @@
   <!-- TAB HISTORIAL -->
   <div id="panelHistorial" style="display:none">
     <div id="historialContainer"></div>
+  </div>
+
+  <!-- TAB STATS -->
+  <div id="panelStats" style="display:none">
+    <div id="statsContainer"></div>
   </div>
 </main>
 
@@ -381,6 +406,10 @@ function setModo(m){
   // Botones modo
   document.getElementById('modoSuper').className='modo-btn'+(m==='super'?' active-super':'');
   document.getElementById('modoVerde').className='modo-btn'+(m==='verduleria'?' active-verde':'');
+  // Stats solo visible en super
+  const tabStats=document.getElementById('tabStats');
+  if(tabStats) tabStats.style.display=m==='super'?'':'none';
+  if(m==='verduleria'&&tabActual==='stats') setTab('planificar');
 
   // Color tabs
   document.querySelectorAll('.tab').forEach(t=>{
@@ -1274,17 +1303,191 @@ function copiarLista(){
     });
 }
 
+// ══ STATS ══
+function renderStats(){
+  const cont=document.getElementById('statsContainer');
+  const hist=historialSuper;
+  if(!hist.length){
+    cont.innerHTML='<div class="empty"><div class="icon">📊</div><p>Hacé al menos una compra<br>para ver las estadísticas.</p></div>';
+    return;
+  }
+
+  // ── Métricas generales ──
+  const totalGastado=hist.reduce((s,h)=>s+h.total,0);
+  const promPorCompra=totalGastado/hist.length;
+  const maxCompra=Math.max(...hist.map(h=>h.total));
+  const minCompra=Math.min(...hist.map(h=>h.total));
+
+  // ── Frecuencia de productos ──
+  const freq={};
+  hist.forEach(h=>h.items.forEach(i=>{
+    if(!freq[i.nombre]) freq[i.nombre]={count:0,totalGasto:0};
+    freq[i.nombre].count++;
+    freq[i.nombre].totalGasto+=(i.precio||0)*(i.qty||1);
+  }));
+  const freqSorted=Object.entries(freq).sort((a,b)=>b[1].count-a[1].count).slice(0,10);
+  const maxFreq=freqSorted[0]?.[1].count||1;
+
+  // ── Gasto por categoría ──
+  const porCat={};
+  hist.forEach(h=>h.items.forEach(i=>{
+    const cat=i.categoria||'Otro';
+    if(!porCat[cat]) porCat[cat]=0;
+    porCat[cat]+=(i.precio||0)*(i.qty||1);
+  }));
+  const catSorted=Object.entries(porCat).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const maxCat=catSorted[0]?.[1]||1;
+
+  // ── Evolución del gasto ──
+  const evolucion=[...hist].reverse(); // cronológico
+  const maxGasto=Math.max(...evolucion.map(h=>h.total))||1;
+
+  // ── Productos que más subieron ──
+  const variaciones=[];
+  for(let i=0;i<hist.length-1;i++){
+    const actual=hist[i], anterior=hist[i+1];
+    actual.items.forEach(item=>{
+      if(!item.precio) return;
+      const ant=anterior.items.find(x=>x.nombre===item.nombre);
+      if(ant&&ant.precio>0){
+        const pct=(item.precio-ant.precio)/ant.precio*100;
+        if(Math.abs(pct)>0.5) variaciones.push({nombre:item.nombre,pct,nuevo:item.precio,ant:ant.precio});
+      }
+    });
+  }
+  variaciones.sort((a,b)=>b.pct-a.pct);
+  const suben=variaciones.filter(v=>v.pct>0).slice(0,5);
+  const bajan=variaciones.filter(v=>v.pct<0).slice(0,3);
+
+  // ── Inflación entre últimas 2 compras ──
+  let inflacionHTML='';
+  if(hist.length>=2){
+    const actual=hist[0], anterior=hist[1];
+    const comunes=actual.items.filter(i=>i.precio>0&&anterior.items.find(x=>x.nombre===i.nombre&&x.precio>0));
+    if(comunes.length){
+      const sumAnt=comunes.reduce((s,i)=>{const a=anterior.items.find(x=>x.nombre===i.nombre);return s+(a?.precio||0);},0);
+      const sumNuev=comunes.reduce((s,i)=>s+i.precio,0);
+      const pct=(sumNuev-sumAnt)/sumAnt*100;
+      const cls=pct>=0?'sube':'baja';
+      const icon=pct>=0?'▲':'▼';
+      inflacionHTML=`<div class="stat-card" style="text-align:center;padding:1rem">
+        <div style="font-size:.8rem;color:var(--muted);margin-bottom:.3rem">Variación de precios entre últimas 2 compras</div>
+        <span class="inflacion-badge ${cls}">${icon} ${Math.abs(pct).toFixed(1)}% en ${comunes.length} productos comunes</span>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">${anterior.fecha} → ${actual.fecha}</div>
+      </div>`;
+    }
+  }
+
+  let html='';
+
+  // Métricas generales
+  html+=`<div class="stats-section">
+    <div class="stats-title">💰 Resumen general</div>
+    ${inflacionHTML}
+    <div class="stat-grid">
+      <div class="stat-mini"><div class="stat-mini-val">${hist.length}</div><div class="stat-mini-label">Compras registradas</div></div>
+      <div class="stat-mini"><div class="stat-mini-val">$${Math.round(promPorCompra).toLocaleString('es-AR')}</div><div class="stat-mini-label">Promedio por compra</div></div>
+      <div class="stat-mini"><div class="stat-mini-val">$${maxCompra.toLocaleString('es-AR')}</div><div class="stat-mini-label">Compra más cara</div></div>
+      <div class="stat-mini"><div class="stat-mini-val">$${minCompra.toLocaleString('es-AR')}</div><div class="stat-mini-label">Compra más barata</div></div>
+    </div>
+  </div>`;
+
+  // Evolución del gasto
+  if(evolucion.length>1){
+    const svgW=300,svgH=80,pad=10;
+    const pts=evolucion.map((h,i)=>{
+      const x=pad+(i/(evolucion.length-1))*(svgW-pad*2);
+      const y=svgH-pad-(h.total/maxGasto)*(svgH-pad*2);
+      return{x,y,total:h.total,fecha:h.fecha};
+    });
+    const polyline=pts.map(p=>`${p.x},${p.y}`).join(' ');
+    const area=`${pts[0].x},${svgH} `+pts.map(p=>`${p.x},${p.y}`).join(' ')+` ${pts[pts.length-1].x},${svgH}`;
+    html+=`<div class="stats-section">
+      <div class="stats-title">📈 Evolución del gasto</div>
+      <div class="stat-card" style="padding:.8rem">
+        <svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;overflow:visible">
+          <defs><linearGradient id="grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4f8ef7" stop-opacity=".3"/><stop offset="100%" stop-color="#4f8ef7" stop-opacity="0"/></linearGradient></defs>
+          <polygon points="${area}" fill="url(#grad)"/>
+          <polyline points="${polyline}" fill="none" stroke="#4f8ef7" stroke-width="2" stroke-linejoin="round"/>
+          ${pts.map((p,i)=>`
+            <circle cx="${p.x}" cy="${p.y}" r="3" fill="#4f8ef7"/>
+            <text x="${p.x}" y="${p.y-6}" text-anchor="middle" font-size="7" fill="#7a82a0">${p.fecha.substring(0,5)}</text>
+            <text x="${p.x}" y="${svgH}" text-anchor="middle" font-size="7" fill="#38d9a9">$${Math.round(p.total/1000)}k</text>
+          `).join('')}
+        </svg>
+      </div>
+    </div>`;
+  }
+
+  // Productos más comprados
+  html+=`<div class="stats-section">
+    <div class="stats-title">🔁 Productos más comprados</div>
+    <div class="stat-card">
+      ${freqSorted.map(([nombre,d])=>`
+        <div class="stat-bar-wrap">
+          <span class="stat-bar-label" title="${nombre}">${nombre}</span>
+          <div class="stat-bar-outer"><div class="stat-bar-inner" style="width:${(d.count/maxFreq*100).toFixed(0)}%;background:var(--accent)"></div></div>
+          <span class="stat-bar-val">${d.count}x</span>
+        </div>`).join('')}
+    </div>
+  </div>`;
+
+  // Gasto por categoría
+  html+=`<div class="stats-section">
+    <div class="stats-title">🏷️ Gasto por categoría</div>
+    <div class="stat-card">
+      ${catSorted.map(([cat,total])=>`
+        <div class="stat-bar-wrap">
+          <span class="stat-bar-label" title="${cat}">${cat}</span>
+          <div class="stat-bar-outer"><div class="stat-bar-inner" style="width:${(total/maxCat*100).toFixed(0)}%;background:var(--accent2)"></div></div>
+          <span class="stat-bar-val" style="min-width:70px;color:var(--accent2)">$${Math.round(total/1000)}k</span>
+        </div>`).join('')}
+    </div>
+  </div>`;
+
+  // Variaciones de precio
+  if(suben.length||bajan.length){
+    html+=`<div class="stats-section">
+      <div class="stats-title">💸 Variaciones de precio (última vs anterior)</div>
+      <div class="stat-card">`;
+    if(suben.length){
+      html+=`<div style="font-size:.75rem;color:var(--danger);font-weight:700;margin-bottom:.3rem">▲ Subieron</div>`;
+      suben.forEach(v=>{
+        html+=`<div class="stat-bar-wrap">
+          <span class="stat-bar-label">${v.nombre}</span>
+          <div class="stat-bar-outer"><div class="stat-bar-inner" style="width:${Math.min(v.pct,100).toFixed(0)}%;background:var(--danger)"></div></div>
+          <span class="stat-bar-val" style="color:var(--danger)">+${v.pct.toFixed(0)}%</span>
+        </div>`;
+      });
+    }
+    if(bajan.length){
+      html+=`<div style="font-size:.75rem;color:var(--verde);font-weight:700;margin:.5rem 0 .3rem">▼ Bajaron</div>`;
+      bajan.forEach(v=>{
+        html+=`<div class="stat-bar-wrap">
+          <span class="stat-bar-label">${v.nombre}</span>
+          <div class="stat-bar-outer"><div class="stat-bar-inner" style="width:${Math.min(Math.abs(v.pct),100).toFixed(0)}%;background:var(--verde)"></div></div>
+          <span class="stat-bar-val" style="color:var(--verde)">${v.pct.toFixed(0)}%</span>
+        </div>`;
+      });
+    }
+    html+=`</div></div>`;
+  }
+
+  cont.innerHTML=html;
+}
+
 // ══ TABS ══
 function setTab(tab){
   tabActual=tab;
-  ['planificar','comprar','historial'].forEach(t=>{
-    document.getElementById('panel'+t.charAt(0).toUpperCase()+t.slice(1)).style.display=t===tab?'':'none';
+  ['planificar','comprar','historial','stats'].forEach(t=>{
+    const panel=document.getElementById('panel'+t.charAt(0).toUpperCase()+t.slice(1));
+    if(panel) panel.style.display=t===tab?'':'none';
     const el=document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1));
-    el.classList.remove('active','active-verde');
-    if(t===tab)el.classList.add(modo==='super'?'active':'active-verde');
+    if(el){ el.classList.remove('active','active-verde'); if(t===tab)el.classList.add(modo==='super'?'active':'active-verde'); }
   });
   if(tab==='comprar')renderComprar();
   if(tab==='historial')renderHistorial();
+  if(tab==='stats')renderStats();
 }
 
 function setStatus(state,msg){
