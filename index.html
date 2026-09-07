@@ -314,7 +314,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const SCRIPT_URL     = 'https://script.google.com/macros/s/AKfycbzHhsFJ1D39rUdT71o6PmVViQzFFf-W-npb9WhdL8v--LzldfPDD97I-XUES8iPq8KT/exec';
+const SCRIPT_URL     = 'https://script.google.com/macros/s/AKfycbzh7k_C_kIFSWBH12RV_ieixhU0RkqczikBWcaXZCjX3wz_Qn8emsVSGeXfMvLb5TDe/exec';
 const CSV_PRODUCTOS  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=0&single=true&output=csv';
 const CSV_VERDULERIA = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=1009068369&single=true&output=csv';
 const CSV_ESTADO     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=1847026016&single=true&output=csv';
@@ -352,6 +352,7 @@ async function init(){
   }
   updateOnlineStatus();
   setModo('super');
+  startRefresh(); // sync tachados en tiempo real
 }
 
 // ══ MODO ══
@@ -447,18 +448,21 @@ function parseCsvRow(row){
 }
 
 async function cargarEstado(){
-  // Lee directo del Apps Script — sin caché, siempre fresco
   const res=await fetch(SCRIPT_URL+'?t='+Date.now());
   const json=await res.json();
   const data=json.data||{};
   listaSuper=data.listaSuper||{};
   listaVerde=data.listaVerde||{};
-  // historial se carga por separado desde la hoja Historial
+  // Aplicar tachados desde hoja Tachados
+  const tachados=json.tachados||[];
+  tachados.forEach(t=>{
+    if(t.modo==='super' && listaSuper[t.nombre]) listaSuper[t.nombre].comprado=t.comprado;
+    if(t.modo==='verduleria' && listaVerde[t.nombre]) listaVerde[t.nombre].comprado=t.comprado;
+  });
   if(data.catalogoExtras){
     data.catalogoExtras.forEach(ex=>{
       const prod=catalogoSuper.find(p=>p.nombre===ex.nombre);
       if(prod){
-        // El precio del CSV (ticket) tiene prioridad si existe, sino usa el de catalogoExtras
         if(!prod.precio && ex.precio) prod.precio=ex.precio;
         prod.frecuencia=ex.frecuencia||'ocasional';
         prod.nota=ex.nota||'';
@@ -607,7 +611,11 @@ function toggleComprado(nombre,e){
   const lista=getLista();
   if(!lista[nombre])return;
   lista[nombre].comprado=!lista[nombre].comprado;
-  guardarDebounce();renderComprar();actualizarBadge();
+  const comprado=lista[nombre].comprado;
+  // Guardar solo el tachado en hoja Tachados — no pisamos el estado del otro
+  fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
+    body:JSON.stringify({accion:'tachar',nombre,modo,comprado})}).catch(e=>{});
+  renderComprar();actualizarBadge();
 }
 
 // ══ ELIMINAR ══
@@ -746,6 +754,9 @@ function archivarLista(){
 function limpiarLista(){
   if(!confirm('¿Limpiar toda la lista?'))return;
   if(modo==='super')listaSuper={};else listaVerde={};
+  // Limpiar tachados del modo en el Sheet
+  fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
+    body:JSON.stringify({accion:'limpiar',modo})}).catch(e=>{});
   guardar();render();
 }
 
@@ -1208,6 +1219,34 @@ function esc(s){return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
 
 document.getElementById('modalSuper').addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModales();if(e.key==='Enter'&&e.target.id!=='inputNuevaCat')guardarNuevoProducto();});
 document.getElementById('modalVerde').addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModales();if(e.key==='Enter')guardarNuevoProductoVerde();});
+
+// Auto-refresh de tachados cada 10 segundos (sync en tiempo real)
+let refreshTimer=null;
+async function refreshTachados(){
+  try{
+    const res=await fetch(SCRIPT_URL+'?t='+Date.now());
+    const json=await res.json();
+    const tachados=json.tachados||[];
+    let cambios=false;
+    tachados.forEach(t=>{
+      if(t.modo==='super' && listaSuper[t.nombre]){
+        if(listaSuper[t.nombre].comprado!==t.comprado){listaSuper[t.nombre].comprado=t.comprado;cambios=true;}
+      }
+      if(t.modo==='verduleria' && listaVerde[t.nombre]){
+        if(listaVerde[t.nombre].comprado!==t.comprado){listaVerde[t.nombre].comprado=t.comprado;cambios=true;}
+      }
+    });
+    if(cambios && tabActual==='comprar') renderComprar();
+  }catch(e){}
+}
+
+function startRefresh(){ refreshTimer=setInterval(refreshTachados,10000); }
+function stopRefresh(){ clearInterval(refreshTimer); }
+
+// Solo refrescar cuando la pestaña está visible
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden) stopRefresh(); else startRefresh();
+});
 
 init();
 </script>
