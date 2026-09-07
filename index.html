@@ -194,6 +194,22 @@
   .empty .icon{font-size:2.5rem;margin-bottom:.6rem;}
   .empty p{font-size:.9rem;}
   mark{background:#4f8ef740;color:var(--text);border-radius:2px;}
+
+  /* COMPARADOR DE PRECIOS */
+  .precio-comp{margin-top:.8rem;border-top:1px solid var(--border);padding-top:.7rem;}
+  .precio-comp-title{font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;}
+  .precio-comp-row{display:flex;justify-content:space-between;align-items:center;font-size:.8rem;padding:.25rem 0;border-bottom:1px solid #2e325030;}
+  .precio-comp-row:last-child{border-bottom:none;}
+  .precio-comp-nombre{flex:1;color:var(--text);}
+  .precio-comp-valores{display:flex;align-items:center;gap:.5rem;flex-shrink:0;}
+  .precio-ant{color:var(--muted);font-size:.75rem;text-decoration:line-through;}
+  .precio-nuevo{font-weight:600;}
+  .badge-sube{background:#3a1a1a;color:var(--danger);font-size:.68rem;font-weight:700;padding:.1rem .35rem;border-radius:3px;}
+  .badge-baja{background:#1a3a1a;color:var(--verde);font-size:.68rem;font-weight:700;padding:.1rem .35rem;border-radius:3px;}
+  .badge-igual{background:var(--cat-pill);color:var(--muted);font-size:.68rem;font-weight:700;padding:.1rem .35rem;border-radius:3px;}
+  .resumen-inflacion{margin-top:.6rem;padding:.5rem .7rem;border-radius:7px;font-size:.8rem;display:flex;justify-content:space-between;align-items:center;}
+  .resumen-inflacion.sube{background:#3a1a1a;border:1px solid var(--danger);}
+  .resumen-inflacion.baja{background:#1a3a1a;border:1px solid var(--verde);}
 </style>
 </head>
 <body>
@@ -968,6 +984,62 @@ function renderComprarVerde(items,cont){
 }
 
 // ══ RENDER HISTORIAL ══
+function generarComparador(histActual, histAnterior){
+  if(!histAnterior) return '';
+
+  // Mapear precios de ambas compras por nombre
+  const preciosAnt={}, preciosNuev={};
+  histAnterior.items.forEach(i=>{ if(i.precio>0) preciosAnt[i.nombre]=i.precio; });
+  histActual.items.forEach(i=>{ if(i.precio>0) preciosNuev[i.nombre]=i.precio; });
+
+  // Solo productos que aparecen en ambas con precio
+  const comunes=Object.keys(preciosNuev).filter(n=>preciosAnt[n]&&preciosNuev[n]);
+  if(!comunes.length) return '';
+
+  let suben=0, bajan=0, iguales=0;
+  let totalAnt=0, totalNuev=0;
+  let rows='';
+
+  comunes.sort((a,b)=>{
+    const diffA=((preciosNuev[a]-preciosAnt[a])/preciosAnt[a]);
+    const diffB=((preciosNuev[b]-preciosAnt[b])/preciosAnt[b]);
+    return diffB-diffA; // mayor variación primero
+  });
+
+  comunes.forEach(nombre=>{
+    const ant=preciosAnt[nombre];
+    const nuev=preciosNuev[nombre];
+    const diff=((nuev-ant)/ant*100);
+    totalAnt+=ant; totalNuev+=nuev;
+    let badge='';
+    if(Math.abs(diff)<0.5){ badge=`<span class="badge-igual">= igual</span>`; iguales++; }
+    else if(diff>0){ badge=`<span class="badge-sube">▲ ${diff.toFixed(0)}%</span>`; suben++; }
+    else{ badge=`<span class="badge-baja">▼ ${Math.abs(diff).toFixed(0)}%</span>`; bajan++; }
+    rows+=`<div class="precio-comp-row">
+      <span class="precio-comp-nombre">${nombre}</span>
+      <div class="precio-comp-valores">
+        <span class="precio-ant">$${ant.toLocaleString('es-AR')}</span>
+        <span class="precio-nuevo">$${nuev.toLocaleString('es-AR')}</span>
+        ${badge}
+      </div>
+    </div>`;
+  });
+
+  const diffTotal=totalAnt>0?((totalNuev-totalAnt)/totalAnt*100):0;
+  const resumenClass=diffTotal>=0?'sube':'baja';
+  const resumenIcon=diffTotal>=0?'▲':'▼';
+  const resumen=`<div class="resumen-inflacion ${resumenClass}">
+    <span>Variación promedio de precios</span>
+    <span style="font-weight:700">${resumenIcon} ${Math.abs(diffTotal).toFixed(1)}%</span>
+  </div>`;
+
+  return `<div class="precio-comp">
+    <div class="precio-comp-title">📈 Comparación vs compra anterior — ${suben} suben · ${bajan} bajan · ${iguales} iguales</div>
+    ${rows}
+    ${resumen}
+  </div>`;
+}
+
 function renderHistorial(){
   const cont=document.getElementById('historialContainer');
   const histSuper=historialSuper||[];
@@ -982,6 +1054,12 @@ function renderHistorial(){
     const esVerde=h.modo==='verduleria';
     const totalReal=h.items.reduce((s,i)=>s+(i.precio||0)*(i.qty||1),0);
     const comprados=h.items.filter(i=>i.comprado).length;
+    // Buscar compra anterior del mismo modo para comparar
+    const mismaModa=todos.filter(x=>x.modo===h.modo);
+    const idxActual=mismaModa.findIndex(x=>x.id===h.id);
+    const anterior=mismaModa[idxActual+1]||null;
+    const compHTML=generarComparador(h, anterior);
+
     html+=`<div class="hist-item ${esVerde?'verde':'super'}" id="hist_${h.id}">
       <div class="hist-header" onclick="toggleHistItem(${h.id})">
         <div>
@@ -1002,6 +1080,7 @@ function renderHistorial(){
             <span style="${i.comprado?'text-decoration:line-through;color:var(--muted)':''}">${i.nombre} ${i.unidad?i.qty+' '+i.unidad:'×'+i.qty}</span>
             <span style="color:var(--accent2)">${i.precio?'$'+(i.precio*i.qty).toLocaleString('es-AR'):''}</span>
           </div>`).join('')}
+        ${compHTML}
         <div class="hist-acciones">
           <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .7rem" onclick="restaurarDesdeHistorial(${h.id},'${h.modo}')">↩ Restaurar</button>
           <button class="btn btn-ghost" style="font-size:.8rem;padding:.35rem .7rem;color:var(--danger)" onclick="eliminarHistorial(${h.id},'${h.modo}')">🗑 Eliminar</button>
