@@ -314,7 +314,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const SCRIPT_URL     = 'https://script.google.com/macros/s/AKfycbyoq3L3N_JMYxL0Oq2OqVD6UmrVkiXNwnEsVcYKGd_H95Cxi5opLPuKLNtzZ8pmVkBK/exec';
+const SCRIPT_URL     = 'https://script.google.com/macros/s/AKfycbzHhsFJ1D39rUdT71o6PmVViQzFFf-W-npb9WhdL8v--LzldfPDD97I-XUES8iPq8KT/exec';
 const CSV_PRODUCTOS  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=0&single=true&output=csv';
 const CSV_VERDULERIA = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=1009068369&single=true&output=csv';
 const CSV_ESTADO     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=1847026016&single=true&output=csv';
@@ -477,21 +477,41 @@ async function cargarHistorial(){
     const filas=text.trim().split('\n').slice(1).filter(f=>f.trim());
     historialSuper=[];historialVerde=[];
     filas.forEach(f=>{
-      const cols=parseCsvRow(f);
+      // Parser especial: las primeras 5 columnas son simples, la 6ta (items) es JSON complejo
+      // Encontrar las primeras 5 comas y tomar el resto como items
+      let rest = f;
+      const cols = [];
+      for(let i=0;i<5;i++){
+        // Manejar campos con comillas
+        if(rest.startsWith('"')){
+          const end=rest.indexOf('"',1);
+          cols.push(rest.substring(1,end));
+          rest=rest.substring(end+2); // skip closing quote and comma
+        } else {
+          const idx=rest.indexOf(',');
+          if(idx===-1){cols.push(rest);rest='';}
+          else{cols.push(rest.substring(0,idx));rest=rest.substring(idx+1);}
+        }
+      }
+      // El resto es el JSON de items (puede tener comas dentro)
+      let itemsRaw = rest.trim();
+      // Quitar comillas externas del CSV y des-escapar comillas dobles
+      if(itemsRaw.startsWith('"')&&itemsRaw.endsWith('"')){
+        itemsRaw=itemsRaw.slice(1,-1).replace(/""/g,'"');
+      }
       if(!cols[0])return;
       const entrada={
-        id:     parseInt(cols[0])||0,
-        fecha:  cols[1]?.trim()||'',
-        hora:   cols[2]?.trim()||'',
-        modo:   cols[3]?.trim()||'super',
-        total:  parseFloat(cols[4])||0,
-        items:  []
+        id:    parseInt(cols[0])||0,
+        fecha: cols[1]?.trim()||'',
+        hora:  cols[2]?.trim()||'',
+        modo:  cols[3]?.trim()||'super',
+        total: parseFloat(cols[4])||0,
+        items: []
       };
-      try{ entrada.items=JSON.parse(cols[5]||'[]'); }catch(e){}
+      try{ entrada.items=JSON.parse(itemsRaw); }catch(e){ console.log('Error items:',e,itemsRaw.substring(0,100)); }
       if(entrada.modo==='verduleria') historialVerde.push(entrada);
       else historialSuper.push(entrada);
     });
-    // Ordenar más reciente primero
     historialSuper.sort((a,b)=>b.id-a.id);
     historialVerde.sort((a,b)=>b.id-a.id);
   }catch(e){ console.log('Error cargando historial:',e); }
@@ -527,16 +547,17 @@ async function guardar(){
   const payload=getPayload();
   localStorage.setItem('lista_compras',JSON.stringify(payload));
   try{
-    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)});
     showToast('Guardado ✓');
   }catch(e){showToast('Guardado localmente');}
   document.getElementById('savingInd').classList.remove('visible');
 }
 
 async function guardarFoto(nombre,url){
+  const prod=catalogoSuper.find(p=>p.nombre===nombre)||catalogoVerde.find(p=>p.nombre===nombre);
   try{
-    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({accion:'foto',modo,nombre,url})});
+    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({accion:'foto',modo,nombre,codigo:prod?.codigo||'',url})});
   }catch(e){}
 }
 
@@ -597,7 +618,8 @@ async function eliminarProducto(nombre,e){
   else{catalogoVerde=catalogoVerde.filter(p=>p.nombre!==nombre);if(listaVerde[nombre])delete listaVerde[nombre];}
   if(expandido===nombre)expandido=null;
   guardarDebounce();render();
-  try{await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'eliminar_producto',modo,nombre})});}catch(e){}
+  const _prodEl=modo==='super'?catalogoSuper.find(p=>p.nombre===nombre):catalogoVerde.find(p=>p.nombre===nombre);
+  try{await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({accion:'eliminar_producto',modo,nombre,codigo:_prodEl?.codigo||''})});}catch(e){}
   showToast(`"${nombre}" eliminado`);
 }
 
@@ -649,9 +671,10 @@ function guardarDetalle(nombre){
 }
 
 async function guardarPrecio(nombre, precio){
+  const prod=catalogoSuper.find(p=>p.nombre===nombre);
   try{
-    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({accion:'precio',nombre,precio})});
+    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({accion:'precio',nombre,codigo:prod?.codigo||'',precio})});
   }catch(e){}
 }
 
@@ -712,7 +735,7 @@ function archivarLista(){
     })
   };
   // Guardar en hoja Historial via script
-  fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
+  fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
     body:JSON.stringify({accion:'archivar',...entrada})}).catch(e=>{});
   // Actualizar local
   if(modo==='super'){historialSuper.unshift(entrada);listaSuper={};}
@@ -994,7 +1017,7 @@ function eliminarHistorial(id,m){
   if(!confirm('¿Eliminar este registro?'))return;
   if(m==='verduleria')historialVerde=historialVerde.filter(h=>h.id!==id);
   else historialSuper=historialSuper.filter(h=>h.id!==id);
-  fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
+  fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
     body:JSON.stringify({accion:'eliminar_historial',id})}).catch(e=>{});
   guardarDebounce();renderHistorial();showToast('Eliminado');
 }
@@ -1075,8 +1098,8 @@ async function guardarNuevoProducto(){
   catalogoSuper.push({nombre,categoria:cat,qty_default:1,precio,frecuencia,nota,foto:''});
   cerrarModales();
   try{
-    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({accion:'nuevo_producto',modo:'super',nombre,categoria:cat,cantidad_default:1})});
+    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({accion:'nuevo_producto',modo:'super',nombre,categoria:cat,cantidad_default:1,codigo:''})});
     showToast(`"${nombre}" agregado ✓`);
   }catch(e){showToast(`"${nombre}" agregado (sin conexión)`);}
   render();
@@ -1090,8 +1113,8 @@ async function guardarNuevoProductoVerde(){
   catalogoVerde.push({nombre,unidad,foto:''});
   cerrarModales();
   try{
-    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({accion:'nuevo_producto',modo:'verduleria',nombre,unidad})});
+    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({accion:'nuevo_producto',modo:'verduleria',nombre,unidad,codigo:''})});
     showToast(`"${nombre}" agregado ✓`);
   }catch(e){showToast(`"${nombre}" agregado (sin conexión)`);}
   render();
