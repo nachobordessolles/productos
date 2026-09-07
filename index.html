@@ -314,10 +314,11 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const SCRIPT_URL     = 'https://script.google.com/macros/s/AKfycbwOUqCtKH0FaFGRWLwNyOSMq_C8FhyDgRTWjct_4nCtMWZxl_7yo4kI-0JZ1WKO_pD8/exec';
+const SCRIPT_URL     = 'https://script.google.com/macros/s/AKfycbwT-cMAXvvktOfKeNVv216bvawvVhF2CHlmKHtbUwUOhOSnDj4xmsMyi9iQECWtWY4/exec';
 const CSV_PRODUCTOS  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=0&single=true&output=csv';
 const CSV_VERDULERIA = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=1009068369&single=true&output=csv';
 const CSV_ESTADO     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=1847026016&single=true&output=csv';
+const CSV_HISTORIAL  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=1967145067&single=true&output=csv';
 
 // ESTADO GLOBAL
 let catalogoSuper=[], catalogoVerde=[];
@@ -343,7 +344,7 @@ function updateOnlineStatus(){
 async function init(){
   setStatus('cargando');
   try{
-    await Promise.all([cargarCatalogos(), cargarEstado()]);
+    await Promise.all([cargarCatalogos(), cargarEstado(), cargarHistorial()]);
     setStatus('ok');
   }catch(e){
     setStatus('err','Sin conexión — datos locales');
@@ -452,8 +453,7 @@ async function cargarEstado(){
   const data=json.data||{};
   listaSuper=data.listaSuper||{};
   listaVerde=data.listaVerde||{};
-  historialSuper=data.historialSuper||[];
-  historialVerde=data.historialVerde||[];
+  // historial se carga por separado desde la hoja Historial
   if(data.catalogoExtras){
     data.catalogoExtras.forEach(ex=>{
       const prod=catalogoSuper.find(p=>p.nombre===ex.nombre);
@@ -469,10 +469,38 @@ async function cargarEstado(){
   }
 }
 
+async function cargarHistorial(){
+  try{
+    const res=await fetch(CSV_HISTORIAL+'&t='+Date.now());
+    const buf=await res.arrayBuffer();
+    const text=new TextDecoder('utf-8').decode(buf);
+    const filas=text.trim().split('\n').slice(1).filter(f=>f.trim());
+    historialSuper=[];historialVerde=[];
+    filas.forEach(f=>{
+      const cols=parseCsvRow(f);
+      if(!cols[0])return;
+      const entrada={
+        id:     parseInt(cols[0])||0,
+        fecha:  cols[1]?.trim()||'',
+        hora:   cols[2]?.trim()||'',
+        modo:   cols[3]?.trim()||'super',
+        total:  parseFloat(cols[4])||0,
+        items:  []
+      };
+      try{ entrada.items=JSON.parse(cols[5]||'[]'); }catch(e){}
+      if(entrada.modo==='verduleria') historialVerde.push(entrada);
+      else historialSuper.push(entrada);
+    });
+    // Ordenar más reciente primero
+    historialSuper.sort((a,b)=>b.id-a.id);
+    historialVerde.sort((a,b)=>b.id-a.id);
+  }catch(e){ console.log('Error cargando historial:',e); }
+}
+
 function cargarLocal(){
   try{
     const r=localStorage.getItem('lista_compras');
-    if(r){const d=JSON.parse(r);listaSuper=d.listaSuper||{};listaVerde=d.listaVerde||{};historialSuper=d.historialSuper||[];historialVerde=d.historialVerde||[];}
+    if(r){const d=JSON.parse(r);listaSuper=d.listaSuper||{};listaVerde=d.listaVerde||{};}
   }catch(e){}
 }
 
@@ -483,9 +511,9 @@ function getHistorial(){ return modo==='super'?historialSuper:historialVerde; }
 
 // ══ GUARDAR ══
 function getPayload(){
-  // Solo guardamos frecuencia y nota en Estado — precio y codigo viven en la hoja Productos
+  // Solo guardamos lista activa y extras del catálogo — historial va en hoja separada
   const catalogoExtras=catalogoSuper.map(p=>({nombre:p.nombre,categoria:p.categoria,qty_default:p.qty_default,frecuencia:p.frecuencia||'ocasional',nota:p.nota||''}));
-  return{listaSuper,listaVerde,historialSuper,historialVerde,catalogoExtras};
+  return{listaSuper,listaVerde,catalogoExtras};
 }
 
 function guardarDebounce(){
@@ -683,8 +711,12 @@ function archivarLista(){
       return{nombre,qty:d.qty||1,unidad:d.unidad||'',precio:prod?.precio||0,categoria:prod?.categoria||'',comprado:d.comprado||false};
     })
   };
-  if(modo==='super'){historialSuper.unshift(entrada);if(historialSuper.length>20)historialSuper=historialSuper.slice(0,20);listaSuper={};}
-  else{historialVerde.unshift(entrada);if(historialVerde.length>20)historialVerde=historialVerde.slice(0,20);listaVerde={};}
+  // Guardar en hoja Historial via script
+  fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({accion:'archivar',...entrada})}).catch(e=>{});
+  // Actualizar local
+  if(modo==='super'){historialSuper.unshift(entrada);listaSuper={};}
+  else{historialVerde.unshift(entrada);listaVerde={};}
   guardar();render();setTab('historial');showToast('Lista archivada ✓');
 }
 
@@ -962,6 +994,8 @@ function eliminarHistorial(id,m){
   if(!confirm('¿Eliminar este registro?'))return;
   if(m==='verduleria')historialVerde=historialVerde.filter(h=>h.id!==id);
   else historialSuper=historialSuper.filter(h=>h.id!==id);
+  fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({accion:'eliminar_historial',id})}).catch(e=>{});
   guardarDebounce();renderHistorial();showToast('Eliminado');
 }
 
