@@ -1,4 +1,4 @@
-const CACHE = 'lista-compras-v2';
+const CACHE = 'lista-compras-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -25,12 +25,12 @@ self.addEventListener('fetch', e => {
     e.respondWith(fetch(e.request).catch(() => new Response('{}', {headers:{'Content-Type':'application/json'}})));
     return;
   }
-  // Para assets propios: cache-first
+  // Para assets propios: network-first (siempre la versión nueva), con caché como respaldo
   e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
+    fetch(e.request).then(res => {
       const clone = res.clone();
       caches.open(CACHE).then(c => c.put(e.request, clone));
       return res;
-    }))
+    }).catch(() => caches.match(e.request))
   );
 });

@@ -236,6 +236,30 @@
   .resumen-inflacion{margin-top:.6rem;padding:.5rem .7rem;border-radius:7px;font-size:.8rem;display:flex;justify-content:space-between;align-items:center;}
   .resumen-inflacion.sube{background:#3a1a1a;border:1px solid var(--danger);}
   .resumen-inflacion.baja{background:#1a3a1a;border:1px solid var(--verde);}
+
+  /* ── TAREAS ── */
+  .modo-btn.active-tareas{border-color:var(--warn);background:#2f2610;color:var(--warn);}
+  .t-quien{display:flex;gap:.5rem;align-items:center;margin-bottom:.7rem;font-size:.8rem;color:var(--muted);flex-wrap:wrap;}
+  .t-chip{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:.3rem .8rem;font-size:.8rem;color:var(--text);cursor:pointer;white-space:nowrap;}
+  .t-chip.on{background:var(--warn);border-color:var(--warn);color:#0f1117;font-weight:600;}
+  .t-chips{display:flex;gap:.4rem;overflow-x:auto;padding-bottom:.4rem;margin-bottom:.5rem;}
+  .t-add{display:flex;gap:.5rem;margin-bottom:.8rem;}
+  .t-add input{flex:1;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:.6rem .8rem;font-size:.95rem;}
+  .t-add input:focus{outline:none;border-color:var(--warn);}
+  .t-item{display:flex;gap:.7rem;align-items:flex-start;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.7rem .8rem;margin-bottom:.5rem;}
+  .t-check{width:24px;height:24px;border-radius:50%;border:2px solid var(--muted);flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.8rem;color:#0f1117;margin-top:2px;}
+  .t-item.done .t-check{background:var(--verde);border-color:var(--verde);}
+  .t-body{flex:1;min-width:0;}
+  .t-titulo{font-size:.95rem;word-break:break-word;}
+  .t-item.done .t-titulo{text-decoration:line-through;color:var(--muted);}
+  .t-desc{font-size:.8rem;color:var(--muted);margin-top:.15rem;word-break:break-word;}
+  .t-meta{display:flex;gap:.6rem;flex-wrap:wrap;font-size:.74rem;color:var(--muted);margin-top:.3rem;}
+  .t-meta .venc{color:var(--danger);font-weight:600;}
+  .t-meta .hoy{color:var(--warn);font-weight:600;}
+  .t-edit{background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer;padding:.1rem .3rem;}
+  .t-sec{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:.9rem 0 .4rem;}
+  .t-vacio{text-align:center;color:var(--muted);padding:2rem 1rem;font-size:.9rem;}
+  .t-footer{display:flex;gap:.5rem;justify-content:space-between;margin-top:1rem;flex-wrap:wrap;}
 </style>
 </head>
 <body>
@@ -249,6 +273,7 @@
 <div class="modo-selector">
   <button class="modo-btn active-super" id="modoSuper" onclick="setModo('super')">🛒 Supermercado</button>
   <button class="modo-btn" id="modoVerde" onclick="setModo('verduleria')">🥦 Verdulería</button>
+  <button class="modo-btn" id="modoTareas" onclick="setModo('tareas')">📝 Tareas</button>
 </div>
 
 <div class="tabs">
@@ -264,6 +289,26 @@
     <span class="status-text" id="statusText">Cargando…</span>
   </div>
   <div class="offline-banner" id="offlineBanner">📴 Sin conexión — trabajando con datos locales</div>
+
+
+  <!-- PANEL TAREAS -->
+  <div id="panelTareas" style="display:none">
+    <div class="t-quien">Yo soy:
+      <span class="t-chip" id="yoAyelen" onclick="setYo('Ayelen')">Ayelen</span>
+      <span class="t-chip" id="yoNacho" onclick="setYo('Nacho')">Nacho</span>
+    </div>
+    <div class="t-add">
+      <input type="text" id="tNueva" placeholder="Nueva tarea… (Enter para agregar)" onkeydown="if(event.key==='Enter')agregarRapida()">
+      <button class="btn btn-primary" style="background:var(--warn);color:#0f1117" onclick="agregarRapida()">＋</button>
+    </div>
+    <div class="t-chips" id="tFiltroListas"></div>
+    <div class="t-chips" id="tFiltroPersona"></div>
+    <div id="tContenedor"></div>
+    <div class="t-footer">
+      <button class="btn btn-ghost" style="font-size:.8rem" onclick="toggleCompletadas()" id="btnToggleComp">👁 Ocultar completadas</button>
+      <button class="btn btn-danger" style="font-size:.8rem" onclick="borrarCompletadas()">🗑 Borrar completadas</button>
+    </div>
+  </div>
 
   <!-- TAB PLANIFICAR -->
   <div id="panelPlanificar">
@@ -359,10 +404,43 @@
   </div>
 </div>
 
+<div class="modal-bg" id="modalTarea">
+  <div class="modal">
+    <h2 id="mtTitulo">📝 Tarea</h2>
+    <div class="field"><label>Título</label><input type="text" id="mtNombre" placeholder="Ej: Pagar el gas"></div>
+    <div class="field"><label>Descripción</label><input type="text" id="mtDesc" placeholder="Opcional"></div>
+    <div class="field-row">
+      <div class="field"><label>Lista</label><select id="mtLista"></select></div>
+      <div class="field"><label>Asignada a</label>
+        <select id="mtAsig"><option value="Todos">Los dos</option><option value="Ayelen">Ayelen</option><option value="Nacho">Nacho</option><option value="">Sin asignar</option></select>
+      </div>
+    </div>
+    <div class="new-cat-row">
+      <input type="text" id="mtListaNueva" placeholder="O escribí una lista nueva…">
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Fecha</label><input type="date" id="mtFecha"></div>
+      <div class="field"><label>Se repite</label>
+        <select id="mtRepite">
+          <option value="">No</option><option value="diaria">Todos los días</option>
+          <option value="laborables">Días hábiles</option><option value="semanal">Cada semana</option>
+          <option value="quincenal">Cada 2 semanas</option><option value="mensual">Cada mes</option>
+          <option value="anual">Cada año</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="mtBorrar" onclick="eliminarTarea()" style="margin-right:auto">🗑</button>
+      <button class="btn btn-ghost" onclick="cerrarModalTarea()">Cancelar</button>
+      <button class="btn btn-primary" style="background:var(--warn);color:#0f1117" onclick="guardarTareaModal()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
-const SCRIPT_URL     = 'https://script.google.com/macros/s/AKfycbzh7k_C_kIFSWBH12RV_ieixhU0RkqczikBWcaXZCjX3wz_Qn8emsVSGeXfMvLb5TDe/exec';
+const SCRIPT_URL     = 'https://script.google.com/macros/s/AKfycbwcjXtAggO1NMan-kLyXj4qcZHB7peurZW21dc9wt714ZJ0dKUTMmycL98uvIsykdn6/exec';
 const CSV_PRODUCTOS  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=0&single=true&output=csv';
 const CSV_VERDULERIA = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=1009068369&single=true&output=csv';
 const CSV_ESTADO     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=1847026016&single=true&output=csv';
@@ -406,6 +484,18 @@ async function init(){
 // ══ MODO ══
 function setModo(m){
   modo=m;
+  const esT=m==='tareas';
+  document.getElementById('modoTareas').className='modo-btn'+(esT?' active-tareas':'');
+  document.querySelector('.tabs').style.display=esT?'none':'';
+  document.getElementById('panelTareas').style.display=esT?'':'none';
+  if(esT){
+    document.getElementById('modoSuper').className='modo-btn';
+    document.getElementById('modoVerde').className='modo-btn';
+    ['Planificar','Comprar','Historial','Stats'].forEach(n=>{const p=document.getElementById('panel'+n);if(p)p.style.display='none';});
+    renderTareas();
+    return;
+  }
+  setTab(tabActual==='stats'&&m==='verduleria'?'planificar':tabActual);
   busqueda=''; filtroActivo='todos';
   document.getElementById('searchInput').value='';
   document.getElementById('searchClear').classList.remove('visible');
@@ -503,6 +593,7 @@ async function cargarEstado(){
   const res=await fetch(SCRIPT_URL+'?t='+Date.now());
   const json=await res.json();
   const data=json.data||{};
+  if(json.tareas)tareas=json.tareas;
   listaSuper=data.listaSuper||{};
   listaVerde=data.listaVerde||{};
   // Aplicar tachados desde hoja Tachados
@@ -1516,6 +1607,7 @@ async function refreshTachados(){
     const res=await fetch(SCRIPT_URL+'?t='+Date.now());
     const json=await res.json();
     const tachados=json.tachados||[];
+    aplicarTareasRemotas(json.tareas);
     let cambios=false;
     tachados.forEach(t=>{
       if(t.modo==='super' && listaSuper[t.nombre]){
@@ -1525,7 +1617,7 @@ async function refreshTachados(){
         if(listaVerde[t.nombre].comprado!==t.comprado){listaVerde[t.nombre].comprado=t.comprado;cambios=true;}
       }
     });
-    if(cambios && tabActual==='comprar') renderComprar();
+    if(cambios && tabActual==='comprar' && modo!=='tareas') renderComprar();
   }catch(e){}
 }
 
@@ -1536,6 +1628,174 @@ function stopRefresh(){ clearInterval(refreshTimer); }
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden) stopRefresh(); else startRefresh();
 });
+
+// ══ TAREAS ══
+let tareas=[], tFiltroLista='Todas', tFiltroPersona='Todos', tOcultarComp=false, tEditId=null, tUltimoCambio=0;
+let yo=''; try{yo=localStorage.getItem('yo')||'';}catch(e){}
+const T_LISTAS_BASE=['Pendientes','Hogar','Pagos'];
+const T_COLORES=['#4f8ef7','#38d9a9','#f59e0b','#f06b6b','#a78bfa','#4ade80','#f472b6'];
+
+function postTarea(payload){
+  tUltimoCambio=Date.now();
+  return fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)}).catch(()=>showToast('⚠️ No se pudo guardar'));
+}
+function setYo(n){yo=n;try{localStorage.setItem('yo',n);}catch(e){} renderTareas();}
+function hoyStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function listasTareas(){
+  const set=[...T_LISTAS_BASE];
+  tareas.forEach(t=>{if(t.lista&&!set.includes(t.lista))set.push(t.lista);});
+  return set;
+}
+function colorLista(l){const i=listasTareas().indexOf(l);return T_COLORES[(i<0?0:i)%T_COLORES.length];}
+function fechaTxt(f){
+  if(!f)return '';
+  const h=hoyStr();
+  const d=new Date(f+'T00:00:00'), hoy=new Date(h+'T00:00:00');
+  const diff=Math.round((d-hoy)/86400000);
+  if(diff<0)return `<span class="venc">📅 vencida (${f.slice(8)}/${f.slice(5,7)})</span>`;
+  if(diff===0)return `<span class="hoy">📅 hoy</span>`;
+  if(diff===1)return `<span>📅 mañana</span>`;
+  return `<span>📅 ${f.slice(8)}/${f.slice(5,7)}</span>`;
+}
+const REP_TXT={diaria:'todos los días',laborables:'días hábiles',semanal:'cada semana',quincenal:'cada 2 semanas',mensual:'cada mes',anual:'cada año'};
+function proxFecha(f,rep){
+  let d=new Date((f||hoyStr())+'T00:00:00');
+  const hoy=new Date(hoyStr()+'T00:00:00');
+  const paso=()=>{
+    if(rep==='diaria')d.setDate(d.getDate()+1);
+    else if(rep==='laborables'){do{d.setDate(d.getDate()+1);}while(d.getDay()===0||d.getDay()===6);}
+    else if(rep==='semanal')d.setDate(d.getDate()+7);
+    else if(rep==='quincenal')d.setDate(d.getDate()+14);
+    else if(rep==='mensual')d.setMonth(d.getMonth()+1);
+    else if(rep==='anual')d.setFullYear(d.getFullYear()+1);
+  };
+  paso();
+  while(d<=hoy)paso(); // no dejar la próxima en el pasado
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+function renderTareas(){
+  document.getElementById('yoAyelen').className='t-chip'+(yo==='Ayelen'?' on':'');
+  document.getElementById('yoNacho').className='t-chip'+(yo==='Nacho'?' on':'');
+  document.getElementById('btnToggleComp').textContent=tOcultarComp?'👁 Mostrar completadas':'👁 Ocultar completadas';
+  // filtros
+  const ls=['Todas',...listasTareas()];
+  document.getElementById('tFiltroListas').innerHTML=ls.map(l=>`<span class="t-chip${tFiltroLista===l?' on':''}" onclick="tFiltroLista='${esc(l)}';renderTareas()">${l}</span>`).join('');
+  document.getElementById('tFiltroPersona').innerHTML=['Todos','Ayelen','Nacho'].map(p=>`<span class="t-chip${tFiltroPersona===p?' on':''}" onclick="tFiltroPersona='${p}';renderTareas()">👤 ${p}</span>`).join('');
+
+  let lista=tareas.filter(t=>(tFiltroLista==='Todas'||t.lista===tFiltroLista)&&(tFiltroPersona==='Todos'||t.asignado===tFiltroPersona||t.asignado==='Todos'));
+  const pend=lista.filter(t=>!t.completada).sort((a,b)=>(a.fecha||'9999')<(b.fecha||'9999')?-1:(a.fecha||'9999')>(b.fecha||'9999')?1:a.creada_ts-b.creada_ts);
+  const comp=lista.filter(t=>t.completada).sort((a,b)=>b.completada_ts-a.completada_ts);
+
+  const item=t=>{
+    const asig=t.asignado?`<span>👤 ${t.asignado==='Todos'?'Los dos':t.asignado}</span>`:'';
+    const rep=t.repite?`<span>🔁 ${REP_TXT[t.repite]||''}</span>`:'';
+    const dn=t.completada?`<span>✔ ${t.completada_por||''}</span>`:'';
+    return `<div class="t-item${t.completada?' done':''}">
+      <div class="t-check" onclick="toggleTarea('${t.id}')">${t.completada?'✓':''}</div>
+      <div class="t-body" onclick="abrirModalTarea('${t.id}')">
+        <div class="t-titulo">${t.titulo}</div>
+        ${t.descripcion?`<div class="t-desc">${t.descripcion}</div>`:''}
+        <div class="t-meta"><span style="color:${colorLista(t.lista)}">● ${t.lista||'Sin lista'}</span>${asig}${t.completada?dn:fechaTxt(t.fecha)}${rep}</div>
+      </div>
+      <button class="t-edit" onclick="abrirModalTarea('${t.id}')">✏️</button>
+    </div>`;
+  };
+  let html='';
+  if(!pend.length&&!(comp.length&&!tOcultarComp))html='<div class="t-vacio">🎉 No hay tareas pendientes</div>';
+  html+=pend.map(item).join('');
+  if(comp.length&&!tOcultarComp)html+=`<div class="t-sec">Completadas (${comp.length})</div>`+comp.map(item).join('');
+  document.getElementById('tContenedor').innerHTML=html;
+}
+
+function nuevoId(){return String(Date.now())+Math.floor(Math.random()*100);}
+
+function agregarRapida(){
+  const inp=document.getElementById('tNueva');
+  const titulo=inp.value.trim();
+  if(!titulo)return;
+  const t={id:nuevoId(),titulo,descripcion:'',lista:tFiltroLista==='Todas'?'Pendientes':tFiltroLista,
+    asignado:tFiltroPersona==='Todos'?'Todos':tFiltroPersona,fecha:'',repite:'',completada:false,
+    completada_por:'',completada_ts:0,creada_por:yo,creada_ts:Date.now()};
+  tareas.push(t);inp.value='';renderTareas();
+  postTarea({accion:'tarea_guardar',tarea:t});
+}
+
+function toggleTarea(id){
+  const t=tareas.find(x=>x.id===id);if(!t)return;
+  if(!t.completada&&t.repite){
+    // tarea repetitiva: se corre a la próxima fecha en vez de quedar completada
+    t.fecha=proxFecha(t.fecha,t.repite);
+    showToast('🔁 Próxima: '+t.fecha.slice(8)+'/'+t.fecha.slice(5,7));
+  } else {
+    t.completada=!t.completada;
+    t.completada_por=t.completada?yo:'';
+    t.completada_ts=t.completada?Date.now():0;
+  }
+  renderTareas();
+  postTarea({accion:'tarea_guardar',tarea:t});
+}
+
+function toggleCompletadas(){tOcultarComp=!tOcultarComp;renderTareas();}
+
+function borrarCompletadas(){
+  const n=tareas.filter(t=>t.completada&&(tFiltroLista==='Todas'||t.lista===tFiltroLista)).length;
+  if(!n){showToast('No hay completadas');return;}
+  if(!confirm('¿Borrar '+n+' tarea(s) completada(s)?'))return;
+  const l=tFiltroLista==='Todas'?'':tFiltroLista;
+  tareas=tareas.filter(t=>!(t.completada&&(!l||t.lista===l)));
+  renderTareas();
+  postTarea({accion:'tarea_borrar_completadas',lista:l});
+}
+
+function abrirModalTarea(id){
+  tEditId=id||null;
+  const t=id?tareas.find(x=>x.id===id):null;
+  const sel=document.getElementById('mtLista');
+  sel.innerHTML=listasTareas().map(l=>`<option value="${l}">${l}</option>`).join('');
+  document.getElementById('mtTitulo').textContent=t?'✏️ Editar tarea':'📝 Nueva tarea';
+  document.getElementById('mtNombre').value=t?t.titulo:'';
+  document.getElementById('mtDesc').value=t?t.descripcion:'';
+  sel.value=t?t.lista:(tFiltroLista==='Todas'?'Pendientes':tFiltroLista);
+  document.getElementById('mtListaNueva').value='';
+  document.getElementById('mtAsig').value=t?t.asignado:'Todos';
+  document.getElementById('mtFecha').value=t?t.fecha:'';
+  document.getElementById('mtRepite').value=t?t.repite:'';
+  document.getElementById('mtBorrar').style.display=t?'':'none';
+  document.getElementById('modalTarea').classList.add('open');
+}
+function cerrarModalTarea(){document.getElementById('modalTarea').classList.remove('open');}
+
+function guardarTareaModal(){
+  const titulo=document.getElementById('mtNombre').value.trim();
+  if(!titulo){showToast('Falta el título');return;}
+  const nueva=document.getElementById('mtListaNueva').value.trim();
+  const lista=nueva||document.getElementById('mtLista').value||'Pendientes';
+  const campos={titulo,descripcion:document.getElementById('mtDesc').value.trim(),lista,
+    asignado:document.getElementById('mtAsig').value,fecha:document.getElementById('mtFecha').value,
+    repite:document.getElementById('mtRepite').value};
+  let t=tEditId?tareas.find(x=>x.id===tEditId):null;
+  if(t)Object.assign(t,campos);
+  else{t={id:nuevoId(),completada:false,completada_por:'',completada_ts:0,creada_por:yo,creada_ts:Date.now(),...campos};tareas.push(t);}
+  cerrarModalTarea();renderTareas();
+  postTarea({accion:'tarea_guardar',tarea:t});
+}
+
+function eliminarTarea(){
+  if(!tEditId||!confirm('¿Borrar esta tarea?'))return;
+  tareas=tareas.filter(x=>x.id!==tEditId);
+  const id=tEditId;cerrarModalTarea();renderTareas();
+  postTarea({accion:'tarea_eliminar',id});
+}
+
+// Aplica tareas del servidor (salvo que acabemos de cambiar algo local)
+function aplicarTareasRemotas(arr){
+  if(!arr)return;
+  if(Date.now()-tUltimoCambio<8000)return;
+  const antes=JSON.stringify(tareas);
+  tareas=arr;
+  if(modo==='tareas'&&JSON.stringify(tareas)!==antes&&!document.getElementById('modalTarea').classList.contains('open'))renderTareas();
+}
 
 init();
 </script>
