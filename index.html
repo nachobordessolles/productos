@@ -440,7 +440,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const SCRIPT_URL     = 'https://script.google.com/macros/s/AKfycbwcjXtAggO1NMan-kLyXj4qcZHB7peurZW21dc9wt714ZJ0dKUTMmycL98uvIsykdn6/exec';
+const SCRIPT_URL     = 'https://script.google.com/macros/s/AKfycbwg44TWi_amEWA-ezc1DST14WFZ5j6jMSJ2_F2qP3crwFj_58phzNgr7KpU0FgTr6yv/exec';
 const CSV_PRODUCTOS  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=0&single=true&output=csv';
 const CSV_VERDULERIA = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=1009068369&single=true&output=csv';
 const CSV_ESTADO     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT_P4cU1iORXTyxBG09jo7v9Kyuk4gHFwog6XqTefRwyx09_TYtGZKw7XbxgLNZ0MrmpoFxd_2tLi1w/pub?gid=1847026016&single=true&output=csv';
@@ -1637,7 +1637,7 @@ const T_COLORES=['#4f8ef7','#38d9a9','#f59e0b','#f06b6b','#a78bfa','#4ade80','#f
 
 function postTarea(payload){
   tUltimoCambio=Date.now();
-  return fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)}).catch(()=>showToast('⚠️ No se pudo guardar'));
+  return fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({...payload,actor:yo})}).catch(()=>showToast('⚠️ No se pudo guardar'));
 }
 function setYo(n){yo=n;try{localStorage.setItem('yo',n);}catch(e){} renderTareas();}
 function hoyStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
