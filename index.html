@@ -246,6 +246,11 @@
   .t-add{display:flex;gap:.5rem;margin-bottom:.8rem;}
   .t-add input{flex:1;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:.6rem .8rem;font-size:.95rem;}
   .t-add input:focus{outline:none;border-color:var(--warn);}
+  .t-add-extra{display:flex;gap:.5rem;margin:-.4rem 0 .8rem;}
+  .t-add-extra input{background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:.5rem .7rem;font-size:.85rem;min-width:0;}
+  .t-add-extra input:focus{outline:none;border-color:var(--warn);}
+  .t-add-extra #tNuevaDesc{flex:1;}
+  .t-add-extra #tNuevaFecha{flex:0 0 auto;width:9.5rem;color-scheme:dark;}
   .t-item{display:flex;gap:.7rem;align-items:flex-start;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.7rem .8rem;margin-bottom:.5rem;}
   .t-check{width:24px;height:24px;border-radius:50%;border:2px solid var(--muted);flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.8rem;color:#0f1117;margin-top:2px;}
   .t-item.done .t-check{background:var(--verde);border-color:var(--verde);}
@@ -300,6 +305,10 @@
     <div class="t-add">
       <input type="text" id="tNueva" placeholder="Nueva tarea… (Enter para agregar)" onkeydown="if(event.key==='Enter')agregarRapida()">
       <button class="btn btn-primary" style="background:var(--warn);color:#0f1117" onclick="agregarRapida()">＋</button>
+    </div>
+    <div class="t-add-extra">
+      <input type="text" id="tNuevaDesc" placeholder="Descripción (opcional)" onkeydown="if(event.key==='Enter')agregarRapida()">
+      <input type="date" id="tNuevaFecha" title="Fecha (opcional)">
     </div>
     <div class="t-chips" id="tFiltroListas"></div>
     <div class="t-chips" id="tFiltroPersona"></div>
@@ -1679,11 +1688,11 @@ function renderTareas(){
   document.getElementById('yoNacho').className='t-chip'+(yo==='Nacho'?' on':'');
   document.getElementById('btnToggleComp').textContent=tOcultarComp?'👁 Mostrar completadas':'👁 Ocultar completadas';
   // filtros
-  const ls=['Todas',...listasTareas()];
+  const ls=['Hoy','Todas',...listasTareas()];
   document.getElementById('tFiltroListas').innerHTML=ls.map(l=>`<span class="t-chip${tFiltroLista===l?' on':''}" onclick="tFiltroLista='${esc(l)}';renderTareas()">${l}</span>`).join('');
   document.getElementById('tFiltroPersona').innerHTML=['Todos','Ayelen','Nacho'].map(p=>`<span class="t-chip${tFiltroPersona===p?' on':''}" onclick="tFiltroPersona='${p}';renderTareas()">👤 ${p}</span>`).join('');
 
-  let lista=tareas.filter(t=>(tFiltroLista==='Todas'||t.lista===tFiltroLista)&&(tFiltroPersona==='Todos'||t.asignado===tFiltroPersona||t.asignado==='Todos'));
+  let lista=tareas.filter(t=>pasaFiltroLista(t)&&(tFiltroPersona==='Todos'||t.asignado===tFiltroPersona||t.asignado==='Todos'));
   const pend=lista.filter(t=>!t.completada).sort((a,b)=>(a.fecha||'9999')<(b.fecha||'9999')?-1:(a.fecha||'9999')>(b.fecha||'9999')?1:a.creada_ts-b.creada_ts);
   const comp=lista.filter(t=>t.completada).sort((a,b)=>b.completada_ts-a.completada_ts);
 
@@ -1702,22 +1711,33 @@ function renderTareas(){
     </div>`;
   };
   let html='';
-  if(!pend.length&&!(comp.length&&!tOcultarComp))html='<div class="t-vacio">🎉 No hay tareas pendientes</div>';
+  if(!pend.length&&!(comp.length&&!tOcultarComp))html=`<div class="t-vacio">🎉 No hay tareas pendientes${tFiltroLista==='Hoy'?' para hoy':''}</div>`;
   html+=pend.map(item).join('');
   if(comp.length&&!tOcultarComp)html+=`<div class="t-sec">Completadas (${comp.length})</div>`+comp.map(item).join('');
   document.getElementById('tContenedor').innerHTML=html;
 }
 
+// "Hoy": las que tienen fecha de hoy, más las pendientes vencidas (van en rojo)
+function pasaFiltroLista(t){
+  if(tFiltroLista==='Todas')return true;
+  if(tFiltroLista==='Hoy'){const h=hoyStr();return !!t.fecha&&(t.fecha===h||(!t.completada&&t.fecha<h));}
+  return t.lista===tFiltroLista;
+}
+// lista que se usa al crear una tarea según el filtro elegido
+function listaPorDefecto(){return (tFiltroLista==='Todas'||tFiltroLista==='Hoy')?'Pendientes':tFiltroLista;}
+
 function nuevoId(){return String(Date.now())+Math.floor(Math.random()*100);}
 
 function agregarRapida(){
   const inp=document.getElementById('tNueva');
+  const desc=document.getElementById('tNuevaDesc'), fec=document.getElementById('tNuevaFecha');
   const titulo=inp.value.trim();
-  if(!titulo)return;
-  const t={id:nuevoId(),titulo,descripcion:'',lista:tFiltroLista==='Todas'?'Pendientes':tFiltroLista,
-    asignado:tFiltroPersona==='Todos'?'Todos':tFiltroPersona,fecha:'',repite:'',completada:false,
+  if(!titulo){if(desc.value.trim())showToast('Falta el título');inp.focus();return;}
+  const fecha=fec.value||(tFiltroLista==='Hoy'?hoyStr():'');
+  const t={id:nuevoId(),titulo,descripcion:desc.value.trim(),lista:listaPorDefecto(),
+    asignado:tFiltroPersona==='Todos'?'Todos':tFiltroPersona,fecha,repite:'',completada:false,
     completada_por:'',completada_ts:0,creada_por:yo,creada_ts:Date.now()};
-  tareas.push(t);inp.value='';renderTareas();
+  tareas.push(t);inp.value='';desc.value='';fec.value='';renderTareas();
   postTarea({accion:'tarea_guardar',tarea:t});
 }
 
@@ -1739,9 +1759,17 @@ function toggleTarea(id){
 function toggleCompletadas(){tOcultarComp=!tOcultarComp;renderTareas();}
 
 function borrarCompletadas(){
-  const n=tareas.filter(t=>t.completada&&(tFiltroLista==='Todas'||t.lista===tFiltroLista)).length;
+  const borrar=tareas.filter(t=>t.completada&&pasaFiltroLista(t));
+  const n=borrar.length;
   if(!n){showToast('No hay completadas');return;}
   if(!confirm('¿Borrar '+n+' tarea(s) completada(s)?'))return;
+  if(tFiltroLista==='Hoy'){
+    // solo las completadas de hoy: se borran una por una
+    tareas=tareas.filter(t=>!borrar.includes(t));
+    renderTareas();
+    borrar.forEach(t=>postTarea({accion:'tarea_eliminar',id:t.id}));
+    return;
+  }
   const l=tFiltroLista==='Todas'?'':tFiltroLista;
   tareas=tareas.filter(t=>!(t.completada&&(!l||t.lista===l)));
   renderTareas();
@@ -1756,10 +1784,10 @@ function abrirModalTarea(id){
   document.getElementById('mtTitulo').textContent=t?'✏️ Editar tarea':'📝 Nueva tarea';
   document.getElementById('mtNombre').value=t?t.titulo:'';
   document.getElementById('mtDesc').value=t?t.descripcion:'';
-  sel.value=t?t.lista:(tFiltroLista==='Todas'?'Pendientes':tFiltroLista);
+  sel.value=t?t.lista:listaPorDefecto();
   document.getElementById('mtListaNueva').value='';
   document.getElementById('mtAsig').value=t?t.asignado:'Todos';
-  document.getElementById('mtFecha').value=t?t.fecha:'';
+  document.getElementById('mtFecha').value=t?t.fecha:(tFiltroLista==='Hoy'?hoyStr():'');
   document.getElementById('mtRepite').value=t?t.repite:'';
   document.getElementById('mtBorrar').style.display=t?'':'none';
   document.getElementById('modalTarea').classList.add('open');
