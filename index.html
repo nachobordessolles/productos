@@ -498,6 +498,8 @@ function setModo(m){
   document.querySelector('.tabs').style.display=esT?'none':'';
   document.getElementById('panelTareas').style.display=esT?'':'none';
   if(esT){
+    const fec=document.getElementById('tNuevaFecha');
+    if(!fec.value)fec.value=hoyStr(); // la alta rápida arranca con la fecha de hoy
     document.getElementById('modoSuper').className='modo-btn';
     document.getElementById('modoVerde').className='modo-btn';
     ['Planificar','Comprar','Historial','Stats'].forEach(n=>{const p=document.getElementById('panel'+n);if(p)p.style.display='none';});
@@ -1639,7 +1641,7 @@ document.addEventListener('visibilitychange',()=>{
 });
 
 // ══ TAREAS ══
-let tareas=[], tFiltroLista='Todas', tFiltroPersona='Todos', tOcultarComp=false, tEditId=null, tUltimoCambio=0;
+let tareas=[], tFiltroLista='Hoy', tFiltroPersona='Todos', tOcultarComp=false, tEditId=null, tUltimoCambio=0;
 let yo=''; try{yo=localStorage.getItem('yo')||'';}catch(e){}
 const T_LISTAS_BASE=['Pendientes','Hogar','Pagos'];
 const T_COLORES=['#4f8ef7','#38d9a9','#f59e0b','#f06b6b','#a78bfa','#4ade80','#f472b6'];
@@ -1737,7 +1739,7 @@ function agregarRapida(){
   const t={id:nuevoId(),titulo,descripcion:desc.value.trim(),lista:listaPorDefecto(),
     asignado:tFiltroPersona==='Todos'?'Todos':tFiltroPersona,fecha,repite:'',completada:false,
     completada_por:'',completada_ts:0,creada_por:yo,creada_ts:Date.now()};
-  tareas.push(t);inp.value='';desc.value='';fec.value='';renderTareas();
+  tareas.push(t);inp.value='';desc.value='';fec.value=hoyStr();renderTareas();
   postTarea({accion:'tarea_guardar',tarea:t});
 }
 
