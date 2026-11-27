@@ -1650,12 +1650,9 @@ function postTarea(payload){
   tUltimoCambio=Date.now();
   return fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({...payload,actor:yo})}).catch(()=>showToast('⚠️ No se pudo guardar'));
 }
-// Muestra qué aviso de Telegram debería salir (el POST es no-cors, no se ve la respuesta del script)
+// Sin "Yo soy" el script no manda avisos de Telegram
 function avisoEsperado(t,asigAntes){
-  if(!yo){showToast('⚠️ Elegí "Yo soy" arriba: sin eso no se mandan avisos');return;}
-  if(t.asignado===asigAntes)return;
-  const destino=t.asignado==='Todos'?(yo==='Nacho'?'Ayelen':'Nacho'):t.asignado;
-  if(destino&&destino!==yo)setTimeout(()=>showToast('📨 Aviso por Telegram a '+destino),300);
+  if(!yo&&t.asignado!==asigAntes)showToast('⚠️ Elegí "Yo soy" arriba: sin eso no se mandan avisos');
 }
 function setYo(n){yo=n;try{localStorage.setItem('yo',n);}catch(e){} renderTareas();}
 function hoyStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
