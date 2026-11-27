@@ -428,7 +428,9 @@
       <input type="text" id="mtListaNueva" placeholder="O escribí una lista nueva…">
     </div>
     <div class="field-row">
-      <div class="field"><label>Fecha</label><input type="date" id="mtFecha"></div>
+      <div class="field"><label>Fecha (vacía = Pendientes)</label><input type="date" id="mtFecha">
+        <button type="button" class="btn btn-ghost" style="margin-top:.35rem;width:100%" onclick="document.getElementById('mtFecha').value=''">Sin fecha</button>
+      </div>
       <div class="field"><label>Se repite</label>
         <select id="mtRepite">
           <option value="">No</option><option value="diaria">Todos los días</option>
@@ -487,7 +489,19 @@ async function init(){
   }
   updateOnlineStatus();
   setModo('super');
+  abrirDesdeLink();
   startRefresh(); // sync tachados en tiempo real
+}
+
+// El widget de Android abre ?tareas (lista de tareas) o ?nueva (alta de tarea).
+// Con &pendientes viene de la vista sin fecha del widget.
+function abrirDesdeLink(){
+  const p=new URLSearchParams(location.search);
+  if(!p.has('tareas')&&!p.has('nueva'))return;
+  if(p.has('pendientes'))elegirFiltro('Pendientes');
+  setModo('tareas');
+  if(p.has('nueva')){abrirModalTarea();setTimeout(()=>document.getElementById('mtNombre').focus(),100);}
+  history.replaceState(null,'',location.pathname); // que recargar no lo vuelva a abrir
 }
 
 // ══ MODO ══
@@ -499,7 +513,7 @@ function setModo(m){
   document.getElementById('panelTareas').style.display=esT?'':'none';
   if(esT){
     const fec=document.getElementById('tNuevaFecha');
-    if(!fec.value)fec.value=hoyStr(); // la alta rápida arranca con la fecha de hoy
+    if(!fec.value)fec.value=fechaInicial();
     document.getElementById('modoSuper').className='modo-btn';
     document.getElementById('modoVerde').className='modo-btn';
     ['Planificar','Comprar','Historial','Stats'].forEach(n=>{const p=document.getElementById('panel'+n);if(p)p.style.display='none';});
@@ -1691,7 +1705,7 @@ function renderTareas(){
   document.getElementById('btnToggleComp').textContent=tOcultarComp?'👁 Mostrar completadas':'👁 Ocultar completadas';
   // filtros
   const ls=['Hoy','Todas',...listasTareas()];
-  document.getElementById('tFiltroListas').innerHTML=ls.map(l=>`<span class="t-chip${tFiltroLista===l?' on':''}" onclick="tFiltroLista='${esc(l)}';renderTareas()">${l}</span>`).join('');
+  document.getElementById('tFiltroListas').innerHTML=ls.map(l=>`<span class="t-chip${tFiltroLista===l?' on':''}" onclick="elegirFiltro('${esc(l)}')">${l}</span>`).join('');
   document.getElementById('tFiltroPersona').innerHTML=['Todos','Ayelen','Nacho'].map(p=>`<span class="t-chip${tFiltroPersona===p?' on':''}" onclick="tFiltroPersona='${p}';renderTareas()">👤 ${p}</span>`).join('');
 
   let lista=tareas.filter(t=>pasaFiltroLista(t)&&(tFiltroPersona==='Todos'||t.asignado===tFiltroPersona||t.asignado==='Todos'));
@@ -1723,10 +1737,21 @@ function renderTareas(){
 function pasaFiltroLista(t){
   if(tFiltroLista==='Todas')return true;
   if(tFiltroLista==='Hoy'){const h=hoyStr();return !!t.fecha&&(t.fecha===h||(!t.completada&&t.fecha<h));}
+  // "Pendientes": las que no tienen fecha (no se sabe cuándo se van a hacer), de cualquier lista
+  if(tFiltroLista==='Pendientes')return !t.fecha;
   return t.lista===tFiltroLista;
 }
 // lista que se usa al crear una tarea según el filtro elegido
 function listaPorDefecto(){return (tFiltroLista==='Todas'||tFiltroLista==='Hoy')?'Pendientes':tFiltroLista;}
+// la alta rápida arranca con la fecha de hoy, salvo en "Pendientes"
+function fechaInicial(){return tFiltroLista==='Pendientes'?'':hoyStr();}
+function elegirFiltro(l){
+  const antes=tFiltroLista;
+  tFiltroLista=l;
+  const fec=document.getElementById('tNuevaFecha');
+  if(l==='Pendientes'||antes==='Pendientes')fec.value=fechaInicial();
+  renderTareas();
+}
 
 function nuevoId(){return String(Date.now())+Math.floor(Math.random()*100);}
 
@@ -1735,11 +1760,12 @@ function agregarRapida(){
   const desc=document.getElementById('tNuevaDesc'), fec=document.getElementById('tNuevaFecha');
   const titulo=inp.value.trim();
   if(!titulo){if(desc.value.trim())showToast('Falta el título');inp.focus();return;}
-  const fecha=fec.value||(tFiltroLista==='Hoy'?hoyStr():'');
+  const fecha=fec.value;
   const t={id:nuevoId(),titulo,descripcion:desc.value.trim(),lista:listaPorDefecto(),
     asignado:tFiltroPersona==='Todos'?'Todos':tFiltroPersona,fecha,repite:'',completada:false,
     completada_por:'',completada_ts:0,creada_por:yo,creada_ts:Date.now()};
-  tareas.push(t);inp.value='';desc.value='';fec.value=hoyStr();renderTareas();
+  tareas.push(t);inp.value='';desc.value='';fec.value=fechaInicial();renderTareas();
+  if(!fecha&&tFiltroLista==='Hoy')showToast('📌 Guardada en Pendientes (sin fecha)');
   postTarea({accion:'tarea_guardar',tarea:t});
 }
 
@@ -1765,8 +1791,8 @@ function borrarCompletadas(){
   const n=borrar.length;
   if(!n){showToast('No hay completadas');return;}
   if(!confirm('¿Borrar '+n+' tarea(s) completada(s)?'))return;
-  if(tFiltroLista==='Hoy'){
-    // solo las completadas de hoy: se borran una por una
+  if(tFiltroLista==='Hoy'||tFiltroLista==='Pendientes'){
+    // son filtros por fecha y no listas: se borran una por una
     tareas=tareas.filter(t=>!borrar.includes(t));
     renderTareas();
     borrar.forEach(t=>postTarea({accion:'tarea_eliminar',id:t.id}));
