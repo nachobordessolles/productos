@@ -487,7 +487,17 @@ async function init(){
   }
   updateOnlineStatus();
   setModo('super');
+  abrirDesdeLink();
   startRefresh(); // sync tachados en tiempo real
+}
+
+// El widget de Android abre ?tareas (lista de tareas) o ?nueva (alta de tarea).
+function abrirDesdeLink(){
+  const p=new URLSearchParams(location.search);
+  if(!p.has('tareas')&&!p.has('nueva'))return;
+  setModo('tareas');
+  if(p.has('nueva')){abrirModalTarea();setTimeout(()=>document.getElementById('mtNombre').focus(),100);}
+  history.replaceState(null,'',location.pathname); // que recargar no lo vuelva a abrir
 }
 
 // ══ MODO ══
